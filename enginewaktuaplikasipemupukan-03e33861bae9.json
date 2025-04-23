@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "enginewaktuaplikasipemupukan",
+  "private_key_id": "03e33861bae9de210a766e07ddbb108ff4548e9c",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDOauRV6+3Vq2l4\nkIma5iw3Z5y6uPAsy1MhOyoUe7DJ6/S6y8M0E/60cdBPkjZDzR3eoVYPBwQ5y32o\nsA4ur7mA/Cc3vs2Y/Z4q2l9siTWs/5RuV1XlD+JAfkKMsOMK1beWV2WvdPiKtydk\n+eeD1XI/OvLHZFnmzdc2/sOzjuSv8kjeLVOE7rLb7hpzZP7QnfhqRBaGPazoXB/L\nVCpBA9w12z0uXJcec8hrHt0RyRVrv/LPEFzHPiMpUqgEjJilMN4TmUWpQB5qoAxo\nLYixrys39BUOR21aURJXmUrlMSBLJjQQ5LLkW13qQX6y+Hs4K1k49soh8iWwDDkk\nVHk5PDATAgMBAAECggEAT3ntr7125gGpSvAP43HDTZPZzzUc2Ipy2AUxNxDG6YAt\nyuxgnQEj3TNDOxf3R9TGru0ctw2DDYOxvs0GsOgc+zJbIUYYYFMqXqKVAjO0VIdV\njcSXwGoEucNDeWs0B/xwwvSkpNFbTwGlK+ZiwypgYkMerjIPwWO4/SZLkKuwlqN3\n7aTt1mfewVr69hhchc4xgTcPLCMFGMOWzQ+hg0Ikg2x4fkMnwl7/2BnfF8JhFz4y\n8xM94lBHrDaub6IFiAv316NuAxLeLyj0e1BYnknDGMOxli5GulzGWTck6/oslsbD\n/jLO0jlr1XzAsXAMzigNoq/qNJ9mVnMAPbEv+J5+2QKBgQD4D1OWIEfMMhrCqV3k\nogVo0Dd5No9j+j7jGuKUnJWEChEd5R/lrESHa15RrXZJNLDvCsstJgjbNwz8oZ26\nBlwgdFYzy++dy1Ml2auzlkrL1jOgHWTuQHBgu8Z4ZDsZbqNJaychsUBcoR9caDSO\nRqU945G+Er6nSz6lgW68vJiLGwKBgQDVBlYZs4tZmLfhsVS46vnHmCLhHrz6V5pB\nmRcMMheyOs3+U69nuv1C0vvq5duxrxwE2sFYDYmRX2VXZqQ/6u401nmHJggeWuuH\nuz6OEZKcVtpUJIU2Pya8AfX5YljHqX4Qfp9ZcOho/HhM/c+qjQbJPF73U8L6cj32\nul/NXEGGaQKBgAxvEDyFL7QfitHZFXjBWk4PqcgsoPFc+Mv/a/4Q/zmYG5WJB5lG\nkkTLb/XeIQC4YGoK+3Yu4uDCGKeNHk/Vw8Zorm14OnGJYIiUKZQd42/mM75B2u5K\nUpe2sdMVCxVSQ2MJuPNqZBSAiwbhvkinZ977SjHh1KakEebP3xIczfSjAoGBAM2T\nINIKt4bOX125MQaHFGcuhTJ05HA+zAlUAK7vRHjmUNaH0fUrua6cRyonin0NfN+e\ncAlWfxTAV98hmY5pXFm3RG5NIHaSzUseQr79bFvdYTLkT33LMckrp0F0TDLaeWLX\nn1XEJTTzt/Cs25Q+JndbAFZ0CeyBBRUuRLe8uStJAoGALSthwKR2YY/vNTX/cTlR\nBJ77hJPktBPYgQtDKfeR6j2HIWu75ppfE2pkQbR3xj/5+5Hpf8Rn0+aEMcM8GnX2\nw5Siu2McCvIwH8PWZLoq570BIdvLzgWPYg6opLf0i5fpB7tAAx5euovPogjR2J8L\nIDZWwNg8KBJJJCmCvNo1xko=\n-----END PRIVATE KEY-----\n",
+  "client_email": "agrspancaranagro@enginewaktuaplikasipemupukan.iam.gserviceaccount.com",
+  "client_id": "104762209874062161061",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/agrspancaranagro%40enginewaktuaplikasipemupukan.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
