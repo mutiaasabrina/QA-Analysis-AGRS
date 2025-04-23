@@ -2102,9 +2102,33 @@ def goto_chosen_menu():
 
 
 # %%
+def make_scrollable_frame(parent):
+    canvas = tk.Canvas(parent)
+    scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+    scrollable_frame = tk.Frame(canvas)
+
+    scrollable_frame.bind(
+        "<Configure>",
+        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+    )
+
+    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+
+    # Enable mouse wheel scrolling
+    scrollable_frame.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", lambda event: canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")))
+    scrollable_frame.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+
+    return scrollable_frame
+
+
+# %%
 def qa_calculate_production():
     global label_estate_option, label_divisi, label_blok, label_pokok_sample, label_pokok_panen, label_actual, label_budget, \
-           label_janjang_panen, label_janjang_tertinggal,\
+           label_janjang_panen, label_janjang_tertinggal, \
            combobox_estate, entry_divisi, entry_blok, entry_pokok_sample, entry_pokok_panen, entry_actual, entry_budget, \
            entry_janjang_panen, entry_janjang_tertinggal, \
            submit_estate_button, back_button, current_menu
@@ -2112,87 +2136,97 @@ def qa_calculate_production():
     if not root_exists:
         return
 
-    # --- ROW & COLUMN CONFIGURATION RESET ---
-    for i in range(20): # Reset rows
-        root.rowconfigure(i, weight=0)
-    root.columnconfigure(0, weight=1) # Configure columns needed by THIS screen
-    root.columnconfigure(1, weight=0) # Reset unused columns
-    # --- END CONFIGURATION ---
-
     hide_all_widgets()
     current_menu = "qa_calculate_production"
 
-    # --- Use sticky="ew" on ALL widgets ---
-    label_estate_option = tk.Label(root, text="Pilih estate (Inti/Plasma):", font=("Arial", 12))
-    label_estate_option.grid(row=0, column=0, padx=10, pady=5, sticky="ew")
+    # === SCROLLABLE CONTAINER ===
+    outer_frame = tk.Frame(root)
+    outer_frame.grid(row=0, column=0, sticky="nsew")
+    root.grid_rowconfigure(0, weight=1)
+    root.grid_columnconfigure(0, weight=1)
 
-    ESTATE_OPTIONS = ["Inti", "Plasma"]
-    combobox_estate = ttk.Combobox(root, values=ESTATE_OPTIONS, width=30, font=("Arial", 10))
-    combobox_estate.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
+    scrollable_frame = make_scrollable_frame(outer_frame)  # This is your scrollable area
 
-    label_divisi = tk.Label(root, text="Masukkan Nama Divisi:", font=("Arial", 12))
-    label_divisi.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
+    # === ALL YOUR WIDGETS GO INTO scrollable_frame ===
+    row = 0
+    label_estate_option = tk.Label(scrollable_frame, text="Pilih estate (Inti/Plasma):", font=("Arial", 12))
+    label_estate_option.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
 
-    entry_divisi = tk.Entry(root, font=("Arial", 10))
-    entry_divisi.grid(row=3, column=0, padx=10, pady=5, sticky="ew")
+    combobox_estate = ttk.Combobox(scrollable_frame, values=["Inti", "Plasma"], width=30, font=("Arial", 10))
+    combobox_estate.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
 
-    label_blok = tk.Label(root, text="Masukkan Nama Blok:", font=("Arial", 12))
-    label_blok.grid(row=4, column=0, padx=10, pady=5, sticky="ew")
+    label_divisi = tk.Label(scrollable_frame, text="Masukkan Nama Divisi:", font=("Arial", 12))
+    label_divisi.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
 
-    entry_blok = tk.Entry(root, font=("Arial", 10))
-    entry_blok.grid(row=5, column=0, padx=10, pady=5, sticky="ew")
-    
-    label_pokok_sample = tk.Label(root, text="Masukkan jumlah pokok sample:", font=("Arial", 12))
-    label_pokok_sample.grid(row=6, column=0, padx=10, pady=5, sticky="ew")
+    entry_divisi = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_divisi.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
 
-    entry_pokok_sample = tk.Entry(root, font=("Arial", 10))
-    entry_pokok_sample.grid(row=7, column=0, padx=10, pady=5, sticky="ew")
+    label_blok = tk.Label(scrollable_frame, text="Masukkan Nama Blok:", font=("Arial", 12))
+    label_blok.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
 
-    label_pokok_panen = tk.Label(root, text="Masukkan jumlah pokok panen:", font=("Arial", 12))
-    label_pokok_panen.grid(row=8, column=0, padx=10, pady=5, sticky="ew")
+    entry_blok = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_blok.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
 
-    entry_pokok_panen = tk.Entry(root, font=("Arial", 10))
-    entry_pokok_panen.grid(row=9, column=0, padx=10, pady=5, sticky="ew")
-    
-    label_actual = tk.Label(root, text="Masukkan jumlah produksi aktual:", font=("Arial", 12))
-    label_actual.grid(row=10, column=0, padx=10, pady=5, sticky="ew")
+    label_pokok_sample = tk.Label(scrollable_frame, text="Masukkan jumlah pokok sample:", font=("Arial", 12))
+    label_pokok_sample.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
 
-    entry_actual = tk.Entry(root, font=("Arial", 10))
-    entry_actual.grid(row=11, column=0, padx=10, pady=5, sticky="ew")
+    entry_pokok_sample = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_pokok_sample.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
 
-    label_budget = tk.Label(root, text="Masukkan jumlah budget produksi:", font=("Arial", 12))
-    label_budget.grid(row=12, column=0, padx=10, pady=5, sticky="ew")
+    label_pokok_panen = tk.Label(scrollable_frame, text="Masukkan jumlah pokok panen:", font=("Arial", 12))
+    label_pokok_panen.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
 
-    entry_budget = tk.Entry(root, font=("Arial", 10))
-    entry_budget.grid(row=13, column=0, padx=10, pady=5, sticky="ew")
+    entry_pokok_panen = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_pokok_panen.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
 
-    label_janjang_panen = tk.Label(root, text="Masukkan jumlah janjang panen:", font=("Arial", 12))
-    label_janjang_panen.grid(row=14, column=0, padx=10, pady=5, sticky="ew")
+    label_actual = tk.Label(scrollable_frame, text="Masukkan jumlah produksi aktual:", font=("Arial", 12))
+    label_actual.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
 
-    entry_janjang_panen = tk.Entry(root, font=("Arial", 10))
-    entry_janjang_panen.grid(row=15, column=0, padx=10, pady=5, sticky="ew")
+    entry_actual = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_actual.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
 
-    label_janjang_tertinggal = tk.Label(root, text="Masukkan jumlah janjang tertinggal:", font=("Arial", 12))
-    label_janjang_tertinggal.grid(row=16, column=0, padx=10, pady=5, sticky="ew")
+    label_budget = tk.Label(scrollable_frame, text="Masukkan jumlah budget produksi:", font=("Arial", 12))
+    label_budget.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
 
-    entry_janjang_tertinggal = tk.Entry(root, font=("Arial", 10))
-    entry_janjang_tertinggal.grid(row=17, column=0, padx=10, pady=5, sticky="ew")
+    entry_budget = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_budget.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
 
-    submit_estate_button = tk.Button(root, text="Submit", command=lambda: submit_analysis(
-        combobox_estate.get(),
-        entry_blok.get(),
-        entry_peilscale.get(),
-        combobox_jenis_pupuk_terakhir.get(),
-        entry_tanggal_pupuk_terakhir.get(),
-        combobox_rencana_jenis_pupuk.get(),
-        entry_tanggal_rencana_pupuk.get()
-    ), font=("Arial", 10), bg=PRIMARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR) # Set color
-    submit_estate_button.grid(row=20, column=0, padx=10, pady=10)
+    label_janjang_panen = tk.Label(scrollable_frame, text="Masukkan jumlah janjang panen:", font=("Arial", 12))
+    label_janjang_panen.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
 
-    back_button = tk.Button(root, text="Back", command=go_back, font=("Arial", 10), bg=SECONDARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR) # Set color
-    back_button.grid(row=21, column=0, padx=10, pady=10)
+    entry_janjang_panen = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_janjang_panen.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
 
-    root.columnconfigure(0, weight=1)
+    label_janjang_tertinggal = tk.Label(scrollable_frame, text="Masukkan jumlah janjang tertinggal:", font=("Arial", 12))
+    label_janjang_tertinggal.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    entry_janjang_tertinggal = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_janjang_tertinggal.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    submit_estate_button = tk.Button(scrollable_frame, text="Submit", font=("Arial", 10), bg=PRIMARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
+    submit_estate_button.grid(row=row, column=0, padx=10, pady=10)
+    row += 1
+
+    back_button = tk.Button(scrollable_frame, text="Back", command=go_back, font=("Arial", 10), bg=SECONDARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
+    back_button.grid(row=row, column=0, padx=10, pady=10)
 
 
 # %%
