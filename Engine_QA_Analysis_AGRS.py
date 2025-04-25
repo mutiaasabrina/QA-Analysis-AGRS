@@ -15,19 +15,24 @@ import os
 import datetime
 from datetime import timedelta
 import subprocess
-import traceback # For detailed error printing
+import traceback
 
 # Third-Party Libraries
 import pandas as pd
-import pytz # pip install pytz
-import gspread # pip install gspread
-from oauth2client.service_account import ServiceAccountCredentials # pip install oauth2client
-# from google.oauth2.service_account import Credentials # Alternative auth
+import pytz
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from tkinter import filedialog
+from pydrive2.auth import GoogleAuth
+from pydrive2.drive import GoogleDrive
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
 
 # GUI Libraries
 import tkinter as tk
 from tkinter import ttk, messagebox, StringVar
-from tkcalendar import Calendar # pip install tkcalendar
+from tkcalendar import Calendar
 from PIL import Image, ImageTk
 
 # %% [markdown]
@@ -48,6 +53,7 @@ JSON_PATH = resource_path('enginewaktuaplikasipemupukan-03e33861bae9.json') # Ma
 SHEET_URL = "https://docs.google.com/spreadsheets/d/19GOqS3y20sZYexBgaFQOavCaktXIYZD7cpVSsH9sL9o/edit?usp=sharing"
 SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 SPLASH_IMAGE = resource_path('bgqa.png')
+FOLDER_ID = "1_OgkeR2Iooh9dyoIC6gskIYnJnt8qyJ6"
 
 # --- Fertilizer Data ---
 FERTILIZER_GROUPS = {
@@ -2087,38 +2093,33 @@ def goto_chosen_menu():
 
     if menu_qa == "QA Produksi":
         qa_calculate_production()
-
-    # match combobox_menu_qa:
-    #     case "QA Produksi":
-    #         return qa_calculate_production()
-        # case "QA Perawatan":
-        #     return func_banana()
-        # case "QA Pemupukan":
-        #     return func_cherry()
-        # case "QA Chemist":
-        #     return func_cherry()
-        
-    # show_rainfall_options()
-
+    elif menu_qa == "QA Perawatan":
+        qa_calculate_production()
+    elif menu_qa == "QA Pemupukan":
+        qa_calculate_production()
+    elif menu_qa == "QA Chemist":
+        qa_calculate_production()
 
 # %%
 def make_scrollable_frame(parent):
-    canvas = tk.Canvas(parent)
+    canvas = tk.Canvas(parent, highlightthickness=0)
     scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
     scrollable_frame = tk.Frame(canvas)
 
-    scrollable_frame.bind(
-        "<Configure>",
-        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-    )
+    scrollable_frame_id = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
 
-    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-    canvas.configure(yscrollcommand=scrollbar.set)
+    def _on_frame_configure(event):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+
+    def _on_canvas_configure(event):
+        canvas.itemconfig(scrollable_frame_id, width=event.width)
+
+    scrollable_frame.bind("<Configure>", _on_frame_configure)
+    canvas.bind("<Configure>", _on_canvas_configure)
 
     canvas.pack(side="left", fill="both", expand=True)
     scrollbar.pack(side="right", fill="y")
 
-    # Enable mouse wheel scrolling
     scrollable_frame.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", lambda event: canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")))
     scrollable_frame.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
 
@@ -2126,12 +2127,86 @@ def make_scrollable_frame(parent):
 
 
 # %%
+def upload_photo_to_drive(file_path, note=""):
+    try:
+        # --- Auth using service account ---
+        gauth = GoogleAuth()
+        gauth.auth_method = 'service'
+        gauth.credentials = ServiceAccountCredentials.from_json_keyfile_name(JSON_PATH, SCOPE)
+
+        drive = GoogleDrive(gauth)
+
+        # --- Generate filename with note ---
+        filename = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{note}.jpg"
+
+        # --- Upload to specified folder ---
+        file_drive = drive.CreateFile({
+            'title': filename,
+            'parents': [{'id': FOLDER_ID}]
+        })
+
+        file_drive.SetContentFile(file_path)
+        file_drive.Upload()
+
+        messagebox.showinfo("Berhasil", "Foto berhasil diupload ke Google Drive.")
+        print(f"Uploaded: {filename} to folder ID {FOLDER_ID}")
+
+    except Exception as e:
+        messagebox.showerror("Error", f"Gagal upload foto: {e}")
+        print(f"Error uploading to Google Drive: {e}")
+
+# %%
+def choose_and_upload_file():
+    global uploaded_photo_path
+    file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg *.jpeg *.png")])
+    if not file_path:
+        return
+
+    note_text = entry_upload_note.get()
+    uploaded_photo_path = file_path
+    upload_photo_to_drive(file_path, note_text)
+
+# %%
+def generate_pdf_output():
+    global uploaded_photo_path
+
+    pdf_path = f"hasil_analisa_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    c = canvas.Canvas(pdf_path, pagesize=A4)
+    width, height = A4
+
+    # --- Sample Text Data (You can replace these with actual values) ---
+    c.setFont("Helvetica", 12)
+    c.drawString(50, height - 50, "Hasil Analisa QA Produksi")
+    c.drawString(50, height - 80, f"Tanggal: {datetime.datetime.now().strftime('%d-%m-%Y %H:%M')}")
+    c.drawString(50, height - 110, f"Catatan: {entry_upload_note.get()}")
+
+    # --- Insert the image if available ---
+    if uploaded_photo_path and os.path.exists(uploaded_photo_path):
+        try:
+            img = ImageReader(uploaded_photo_path)
+            c.drawImage(img, 50, height - 400, width=200, preserveAspectRatio=True, mask='auto')
+        except Exception as e:
+            print(f"Error loading image in PDF: {e}")
+            c.drawString(50, height - 140, "Gagal memuat foto untuk PDF.")
+
+    # --- Finalize PDF ---
+    c.showPage()
+    c.save()
+
+    messagebox.showinfo("Berhasil", f"PDF berhasil dibuat:\n{pdf_path}")
+    os.startfile(pdf_path)  # Optional: Open PDF automatically (Windows only)
+
+# %%
 def qa_calculate_production():
     global label_estate_option, label_divisi, label_blok, label_pokok_sample, label_pokok_panen, label_actual, label_budget, \
-           label_janjang_panen, label_janjang_tertinggal, \
+           label_janjang_panen, label_janjang_tertinggal, label_berondolan_tertinggal, label_janjang_tertinggal_mobil, \
+           label_berondolan_tertinggal_mobil, label_rotasi_panen, label_restan, label_jaring, label_produktivitas_pemanen, \
+           label_administrasi_panen, label_kualitas_tbs, label_muatan_overload, label_upload_note, \
            combobox_estate, entry_divisi, entry_blok, entry_pokok_sample, entry_pokok_panen, entry_actual, entry_budget, \
-           entry_janjang_panen, entry_janjang_tertinggal, \
-           submit_estate_button, back_button, current_menu
+           entry_janjang_panen, entry_janjang_tertinggal, entry_berondolan_tertinggal, entry_janjang_tertinggal_mobil, \
+           entry_berondolan_tertinggal_mobil, entry_rotasi_panen, entry_restan, entry_jaring, entry_produktivitas_pemanen, \
+           entry_administrasi_panen, entry_kualitas_tbs, entry_muatan_overload, entry_upload_note, \
+           button_upload_photo, submit_calculation_production_button, back_button, current_menu
 
     if not root_exists:
         return
@@ -2144,8 +2219,13 @@ def qa_calculate_production():
     outer_frame.grid(row=0, column=0, sticky="nsew")
     root.grid_rowconfigure(0, weight=1)
     root.grid_columnconfigure(0, weight=1)
+    outer_frame.grid_rowconfigure(0, weight=1)
+    outer_frame.grid_columnconfigure(0, weight=1)
 
-    scrollable_frame = make_scrollable_frame(outer_frame)  # This is your scrollable area
+    scrollable_frame = make_scrollable_frame(outer_frame)
+
+    # Add this line to make entries stretch full width
+    scrollable_frame.grid_columnconfigure(0, weight=1)
 
     # === ALL YOUR WIDGETS GO INTO scrollable_frame ===
     row = 0
@@ -2213,7 +2293,7 @@ def qa_calculate_production():
     entry_janjang_panen.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
     row += 1
 
-    label_janjang_tertinggal = tk.Label(scrollable_frame, text="Masukkan jumlah janjang tertinggal:", font=("Arial", 12))
+    label_janjang_tertinggal = tk.Label(scrollable_frame, text="Masukkan jumlah janjang tertinggal (di pokok/piringan/path/gawangan (masak, overripe, busuk)):", font=("Arial", 12))
     label_janjang_tertinggal.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
     row += 1
 
@@ -2221,12 +2301,116 @@ def qa_calculate_production():
     entry_janjang_tertinggal.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
     row += 1
 
-    submit_estate_button = tk.Button(scrollable_frame, text="Submit", font=("Arial", 10), bg=PRIMARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
-    submit_estate_button.grid(row=row, column=0, padx=10, pady=10)
+    label_berondolan_tertinggal = tk.Label(scrollable_frame, text="Masukkan jumlah berondolan tertinggal/tersangkut (di pelepah, piringan, path, gawangan):", font=("Arial", 12))
+    label_berondolan_tertinggal.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    entry_berondolan_tertinggal = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_berondolan_tertinggal.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    label_janjang_tertinggal_mobil = tk.Label(scrollable_frame, text="Masukkan jumlah janjang tertinggal di TPH atau tercecer di CR & MR:", font=("Arial", 12))
+    label_janjang_tertinggal_mobil.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    entry_janjang_tertinggal_mobil = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_janjang_tertinggal_mobil.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    label_berondolan_tertinggal_mobil = tk.Label(scrollable_frame, text="Masukkan jumlah berondolan tertinggal di TPH atau tercecer di CR & MR:", font=("Arial", 12))
+    label_berondolan_tertinggal_mobil.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    entry_berondolan_tertinggal_mobil = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_berondolan_tertinggal_mobil.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    label_rotasi_panen = tk.Label(scrollable_frame, text="Masukkan jumlah rotasi panen perbulan:", font=("Arial", 12))
+    label_rotasi_panen.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    entry_rotasi_panen = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_rotasi_panen.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    label_restan = tk.Label(scrollable_frame, text="Masukkan nilai restan:", font=("Arial", 12))
+    label_restan.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    entry_restan = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_restan.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    label_jaring = tk.Label(scrollable_frame, text="Masukkan jumlah pemakaian jaring:", font=("Arial", 12))
+    label_jaring.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    entry_jaring = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_jaring.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    label_produktivitas_pemanen = tk.Label(scrollable_frame, text="Masukkan nilai produktivitas pemanen:", font=("Arial", 12))
+    label_produktivitas_pemanen.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    entry_produktivitas_pemanen = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_produktivitas_pemanen.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    label_administrasi_panen = tk.Label(scrollable_frame, text="Masukkan administrasi pemanen:", font=("Arial", 12))
+    label_administrasi_panen.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    entry_administrasi_panen = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_administrasi_panen.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    label_kualitas_tbs = tk.Label(scrollable_frame, text="Masukkan nilai kualitas TBS:", font=("Arial", 12))
+    label_kualitas_tbs.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    entry_kualitas_tbs = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_kualitas_tbs.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    label_muatan_overload = tk.Label(scrollable_frame, text="Masukkan nilai muatan overload:", font=("Arial", 12))
+    label_muatan_overload.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    entry_muatan_overload = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_muatan_overload.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    label_upload_note = tk.Label(scrollable_frame, text="Catatan Foto (opsional):", font=("Arial", 12))
+    label_upload_note.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    entry_upload_note = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_upload_note.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    button_upload_photo = tk.Button(scrollable_frame, text="Upload Foto", command=choose_and_upload_file, font=("Arial", 10), bg=PRIMARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
+    button_upload_photo.grid(row=row, column=0, padx=10, pady=10, sticky="ew")
+    row += 1
+
+    submit_pdf_button = tk.Button(scrollable_frame, text="Buat PDF", command=generate_pdf_output, font=("Arial", 10), bg=PRIMARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
+    submit_pdf_button.grid(row=row, column=0, padx=10, pady=10, sticky="ew")
+    row += 1
+
+    submit_calculation_production_button = tk.Button(scrollable_frame, text="Submit", command=lambda: submit_analysis(
+        combobox_estate.get(),
+        entry_blok.get(),
+        entry_peilscale.get(),
+        combobox_jenis_pupuk_terakhir.get(),
+        entry_tanggal_pupuk_terakhir.get(),
+        combobox_rencana_jenis_pupuk.get(),
+        entry_tanggal_rencana_pupuk.get()
+    ), font=("Arial", 10), bg=PRIMARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
+    submit_calculation_production_button.grid(row=row, column=0, padx=10, pady=10, sticky="ew")
     row += 1
 
     back_button = tk.Button(scrollable_frame, text="Back", command=go_back, font=("Arial", 10), bg=SECONDARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
-    back_button.grid(row=row, column=0, padx=10, pady=10)
+    back_button.grid(row=row, column=0, padx=10, pady=10, sticky="ew")
 
 
 # %%
@@ -2346,9 +2530,15 @@ def main_process():
            label_daily_rainfall, entry_daily_rainfall, submit_add_rainfall_button, \
            label_update_rainfall, entry_update_rainfall, submit_update_rainfall_button, \
            entry_blok, entry_divisi, entry_tanggal_rencana_pupuk, entry_pokok_sample, entry_pokok_panen, entry_actual, entry_budget, \
-           entry_janjang_panen, entry_janjang_tertinggal, \
+           entry_janjang_panen, entry_janjang_tertinggal, entry_berondolan_tertinggal, entry_janjang_tertinggal_mobil, \
+           entry_berondolan_tertinggal_mobil, entry_rotasi_panen, entry_restan, entry_jaring, entry_produktivitas_pemanen, \
+           entry_administrasi_panen, entry_kualitas_tbs, entry_muatan_overload, label_upload_note, \
            label_blok, label_divisi,  label_tanggal_rencana_pupuk, label_pokok_sample, label_pokok_panen, label_actual, label_budget, \
-           label_janjang_panen, label_janjang_tertinggal, \
+           label_janjang_panen, label_janjang_tertinggal, label_berondolan_tertinggal, label_janjang_tertinggal_mobil, \
+           label_berondolan_tertinggal_mobil, label_rotasi_panen, label_restan, label_jaring, label_produktivitas_pemanen, \
+           label_administrasi_panen, label_kualitas_tbs, label_muatan_overload, entry_upload_note, \
+           uploaded_photo_path, \
+           button_upload_photo, submit_calculation_production_button, \
            button_tanggal_rencana_pupuk, button_tanggal_pupuk_terakhir, \
            label_tanggal_analisa, label_nama_user, label_curah_hujan, \
            label_status, label_reason, label_recommendation, label_selected_estate, \
@@ -2405,6 +2595,31 @@ def main_process():
     entry_janjang_panen = None
     label_janjang_tertinggal = None
     entry_janjang_tertinggal = None
+    label_berondolan_tertinggal = None
+    entry_berondolan_tertinggal = None
+    label_janjang_tertinggal_mobil = None
+    entry_janjang_tertinggal_mobil = None
+    label_berondolan_tertinggal_mobil = None
+    entry_berondolan_tertinggal_mobil = None
+    label_rotasi_panen = None
+    entry_rotasi_panen = None
+    label_restan = None
+    entry_restan = None
+    label_jaring = None
+    entry_jaring = None
+    label_produktivitas_pemanen = None
+    entry_produktivitas_pemanen = None
+    label_administrasi_panen = None
+    entry_administrasi_panen = None
+    label_kualitas_tbs = None
+    entry_kualitas_tbs = None
+    label_muatan_overload = None
+    entry_muatan_overload = None
+    label_upload_note = None
+    entry_upload_note = None
+    uploaded_photo_path = None
+    button_upload_photo = None
+    submit_calculation_production_button = None
     label_tanggal_pupuk_terakhir = None
     entry_tanggal_pupuk_terakhir = None
     label_jenis_pupuk_terakhir = None
