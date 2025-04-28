@@ -520,6 +520,41 @@ def analyze_fertilizer(date_input, username, estate_name, blok_name, df, peilsca
 #  ## 6. Core Logic
 #  
 
+# %% [markdown]
+#  ### 6.1 QA Production
+
+# %%
+def evaluate_budget_actual(budget, actual):
+
+    difference_actual_budget = ((actual - budget) / budget) * 100
+
+    if difference_actual_budget < 70:
+        return 2
+    elif 70 <= difference_actual_budget < 80:
+        return 4
+    elif 80 <= difference_actual_budget < 90:
+        return 6
+    elif 90 <= difference_actual_budget <= 100:
+        return 8
+    elif difference_actual_budget > 100:
+        return 10
+
+# %%
+def evaluate_buah_tinggal(janjang_tinggal):
+
+    
+
+    if janjang_tinggal == 0:
+        return 10
+    elif 0 < janjang_tinggal <= 0.002:
+        return 8
+    elif 0.002 < janjang_tinggal <= 0.004:
+        return 6
+    elif 0.004 < janjang_tinggal <= 0.006:
+        return 4
+    elif janjang_tinggal > 0.006:
+        return 2
+
 # %%
 def analyse_qa_production(combobox_estate, 
                           entry_divisi,
@@ -545,124 +580,11 @@ def analyse_qa_production(combobox_estate,
     # Actual vs Budget
     # Selisih nya * persen rule
 
+    score_actual_budget = evaluate_budget_actual(budget_float, actual_float)
+
+    score_buah_tinggal = evaluate_buah_tinggal(janjang_tertinggal_float)
+
     return True
-
-# %%
-import datetime # Ensure import
-import pandas as pd # Ensure import
-from datetime import timedelta # Ensure import
-
-def calculate_rainfall(df_original, calc_date, daily_rainfall, estate_name):
-    """
-    Calculates rainfall metrics for a specific date and estate,
-    appends to the sheet (dd/mm/yyyy format), and returns the UPDATED ORIGINAL DataFrame.
-    Accumulation is for the 29 days *before* calc_date.
-    """
-    global sheet_data
-
-    if sheet_data is None:
-        messagebox.showerror("Error", "Koneksi ke Google Sheet DB belum siap.")
-        return df_original
-
-    try:
-        # --- Input Validation & Date Conversion ---
-        if isinstance(calc_date, (datetime.datetime, pd.Timestamp)):
-            calc_date = calc_date.date()
-        elif not isinstance(calc_date, datetime.date):
-             try: calc_date = pd.to_datetime(calc_date).date()
-             except Exception: raise ValueError(f"calc_date received an invalid type: {type(calc_date)}")
-
-        daily_rainfall = float(daily_rainfall)
-        if daily_rainfall < 0: raise ValueError("Curah hujan tidak boleh negatif.")
-        # --- End Validation ---
-
-        # --- Get Previous Day's Data ---
-        prev_day_date = calc_date - timedelta(days=1)
-        # Ensure consistent datetime format before filtering
-        df_original['Date'] = pd.to_datetime(df_original['Date']).dt.normalize()
-        prev_day_row = df_original[
-            (df_original['Estate'] == estate_name) &
-            (df_original['Date'].dt.date == prev_day_date)
-        ]
-
-        previous_soil_water_reserve = 0.0
-        if not prev_day_row.empty:
-            swr_val = prev_day_row['Soil Water Reserve (mm)'].iloc[0]
-            previous_soil_water_reserve = pd.to_numeric(swr_val, errors='coerce')
-            if pd.isna(previous_soil_water_reserve): previous_soil_water_reserve = 0.0
-        else:
-             print(f"Note: No data found for previous day {prev_day_date} for {estate_name}. Assuming SWR=0.")
-
-        # --- Calculate Accumulation (29 days ENDING YESTERDAY) ---
-        start_window_date = calc_date - timedelta(days=29) # Start date is 29 days before calc_date
-        end_window_date = calc_date - timedelta(days=1)   # End date is *yesterday*
-
-        # Filter original df for the date window *up to the previous day* AND estate
-        window_df = df_original[
-             (df_original['Estate'] == estate_name) &
-             (df_original['Date'].dt.date >= start_window_date) &
-             (df_original['Date'].dt.date <= end_window_date) # Include end_window_date (yesterday)
-        ].copy() # Use copy
-
-        # Ensure rainfall column is numeric and fill NaNs
-        window_df['Daily Rainfall (mm)'] = pd.to_numeric(window_df['Daily Rainfall (mm)'], errors='coerce').fillna(0)
-
-        # --- FIX: Sum rainfall ONLY within the window (excluding current day's rainfall) ---
-        accumulation_rainfall = window_df['Daily Rainfall (mm)'].sum()
-        # --- END FIX ---
-
-        # --- Calculate Evapotranspiration ---
-        # Logic depends on definition - using length of accumulation window here
-        days_in_acc_window = len(window_df) # How many actual days found in the period ending yesterday
-        # Adjust evapotranspiration logic if needed based on how 'days in window' should be counted
-        evapotranspiration = (120 if days_in_acc_window >= 10 else 150) / 30 # Example: Adjust threshold if needed
-
-        # --- Calculate Water Balance & Reserves ---
-        # Correctly uses current day's rainfall here
-        water_balance = previous_soil_water_reserve + daily_rainfall - evapotranspiration
-        soil_water_reserve = min(water_balance, 200)
-        water_surplus = max(0, water_balance - 200)
-
-        # --- Prepare Data for Sheet and DataFrame ---
-        date_str_sheet = calc_date.strftime('%d/%m/%Y') # Correct format for sheet
-        new_row_values = [
-            date_str_sheet, estate_name, daily_rainfall, accumulation_rainfall, # Use updated accumulation
-            evapotranspiration, water_balance, soil_water_reserve, water_surplus
-        ]
-        new_row_dict = {
-            'Date': pd.Timestamp(calc_date), # Use Timestamp for DataFrame
-            'Estate': estate_name,
-            'Daily Rainfall (mm)': daily_rainfall,
-            'Accumulation Rainfall -29 days': accumulation_rainfall, # Use updated accumulation
-            'Evapotranspiration': evapotranspiration,
-            'Water Balance': water_balance,
-            'Soil Water Reserve (mm)': soil_water_reserve,
-            'Water Surplus': water_surplus
-        }
-
-        # --- Update Sheet and DataFrame ---
-        try:
-            sheet_data.append_row(new_row_values)
-            print(f"Appended to Google Sheet: {new_row_values}")
-        except Exception as e:
-             messagebox.showerror("Sheet Error", f"Gagal menyimpan data ke Google Sheet: {e}")
-             print(f"Error appending to sheet: {e}")
-             return df_original # Don't update local df if sheet update fails
-
-        df_updated = pd.concat([df_original, pd.DataFrame([new_row_dict])], ignore_index=True)
-        df_updated = df_updated.sort_values(by='Date').reset_index(drop=True)
-        print(f"Successfully calculated and added data for {estate_name} on {date_str_sheet}")
-        return df_updated
-
-    except ValueError as ve: # Catch specific validation errors
-        messagebox.showerror("Input Error", f"Gagal memproses data untuk {format_datetime(calc_date)}: {ve}")
-        print(f"Validation Error in calculate_rainfall for {format_datetime(calc_date)}: {ve}")
-        return df_original
-    except Exception as e:
-        messagebox.showerror("Error", f"Gagal menghitung data hujan untuk {format_datetime(calc_date)}: {e}")
-        print(f"Error in calculate_rainfall for {format_datetime(calc_date)}: {e}")
-        traceback.print_exc()
-        return df_original
 
 # %% [markdown]
 #  ## 7. Core Logic - Fertilizer Rules & Validation
@@ -1066,7 +988,7 @@ def validate_rainfall_data_exists(selected_estate):
 # %%
 def create_splash_screen():
     """Creates and displays the splash screen."""
-    global splash_label, splash_button, root, photo_image
+    global splash_label, splash_button, root
 
     if not root_exists: return
 
@@ -1128,7 +1050,6 @@ def create_splash_screen():
         traceback.print_exc()
         root.after(100, start_main_app)
 
-
 # %%
 def start_main_app():
     """Destroys splash screen elements, loads data, and starts the main app."""
@@ -1141,6 +1062,9 @@ def start_main_app():
         splash_label.destroy()
     if splash_button:
         splash_button.destroy()
+
+    # Reset background color to light gray  after splash screen
+    root.configure(bg="#f0f0f0")
 
     # --- Load Initial Data ---
     print("Loading initial data...")
@@ -2515,15 +2439,7 @@ def qa_calculate_production():
     submit_pdf_button.grid(row=row, column=0, padx=10, pady=10, sticky="ew")
     row += 1
 
-    submit_calculation_production_button = tk.Button(scrollable_frame, text="Submit", command=lambda: submit_production_analysis(
-        combobox_estate.get(),
-        entry_blok.get(),
-        entry_peilscale.get(),
-        combobox_jenis_pupuk_terakhir.get(),
-        entry_tanggal_pupuk_terakhir.get(),
-        combobox_rencana_jenis_pupuk.get(),
-        entry_tanggal_rencana_pupuk.get()
-    ), font=("Arial", 10), bg=PRIMARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
+    submit_calculation_production_button = tk.Button(scrollable_frame, text="Submit", command=submit_production_analysis, font=("Arial", 10), bg=PRIMARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
     submit_calculation_production_button.grid(row=row, column=0, padx=10, pady=10, sticky="ew")
     row += 1
 
