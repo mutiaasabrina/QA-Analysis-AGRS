@@ -292,148 +292,48 @@ missing_dates_widgets = {}
 
 # %%
 def load_database(sheet_url, json_path):
-    """
-    Connects to Google Sheets and loads input and output sheets separately.
-    Each input and output sheet is saved into its own DataFrame or worksheet object.
-    """
-    global input_sheets, output_sheets
-    global df_input_sheets, df_output_sheets
+    """Only connect to the spreadsheet. Do not load all sheets at once."""
+    global client, sheet
 
     try:
-        # Authenticate and connect
         creds = ServiceAccountCredentials.from_json_keyfile_name(json_path, SCOPE)
         client = gspread.authorize(creds)
         sheet = client.open_by_url(sheet_url)
 
-        # --- Load Input Sheets ---
-        input_sheets = {}
-        df_input_sheets = {}
-        for name in SHEET_NAMES_INPUT:
-            try:
-                worksheet = sheet.worksheet(name)
-                input_sheets[name] = worksheet
-                # Also load as DataFrame immediately
-                df = pd.DataFrame(worksheet.get_all_records())
-                if not df.empty and 'Tanggal Periksa' in df.columns:
-                    df['Tanggal Periksa'] = pd.to_datetime(df['Tanggal Periksa'], format='%d/%m/%Y', errors='coerce')
-                    df.dropna(subset=['Tanggal Periksa'], inplace=True)
-                df_input_sheets[name] = df
-            except gspread.WorksheetNotFound:
-                print(f"Warning: Input sheet '{name}' not found.")
-                input_sheets[name] = None
-                df_input_sheets[name] = pd.DataFrame()
-
-        # --- Load Output Sheets ---
-        output_sheets = {}
-        df_output_sheets = {}
-        for name in SHEET_NAMES_OUTPUT:
-            try:
-                worksheet = sheet.worksheet(name)
-                output_sheets[name] = worksheet
-                # If you want to preload output data (optional)
-                df_output_sheets[name] = pd.DataFrame(worksheet.get_all_records())
-            except gspread.WorksheetNotFound:
-                print(f"Warning: Output sheet '{name}' not found.")
-                output_sheets[name] = None
-                df_output_sheets[name] = pd.DataFrame()
-
     except Exception as e:
-        messagebox.showerror("Error", f"Gagal memuat data: {e}")
+        messagebox.showerror("Error", f"Gagal konek ke spreadsheet: {e}")
         print(traceback.format_exc())
 
-def append_to_spreadsheet(date_input, username, estate_name, blok_name, current_daily_rainfall, peilscale, last_fertilizer, last_fertilizer_date, next_fertilizer, next_fertilizer_date, reason, recommendation):
-    """Appends analysis results to the 'Output' Google Sheet."""
-    global sheet_output
 
-    if sheet_output is None:
-        messagebox.showerror("Error", "Koneksi ke sheet belum siap.")
-        return "Error"
+# %%
+def load_sheets_for_menu(qa_type):
+    """Load input and output sheet on demand based on the selected QA type."""
+    mapping_input = {
+        "QA Produksi": "Input - Production",
+        "QA Perawatan": "Input - Nursery",
+        "QA Chemist": "Input - Chemist",
+        "QA Pemupukan": "Input - Fertilizer"
+    }
+    mapping_output = {
+        "QA Produksi": "Output - Production",
+        "QA Perawatan": "Output - Nursery",
+        "QA Chemist": "Output - Chemist",
+        "QA Pemupukan": "Output - Fertilizer"
+    }
 
-    status = "Allowed" if not reason else "Not Allowed"
+    input_sheet_name = mapping_input.get(qa_type)
+    output_sheet_name = mapping_output.get(qa_type)
 
-    try:
-        # --- Format dates safely ---
-        last_fert_date_str = ""
-        if isinstance(last_fertilizer_date, (datetime.datetime, datetime.date)): # Use full class names
-            last_fert_date_str = last_fertilizer_date.strftime("%Y-%m-%d")
+    if not input_sheet_name or not output_sheet_name:
+        raise Exception("QA type tidak dikenali.")
 
-        next_fert_date_str = ""
-        if isinstance(next_fertilizer_date, (datetime.datetime, datetime.date)): # Use full class names
-            next_fert_date_str = next_fertilizer_date.strftime("%Y-%m-%d")
-        # --- End date formatting ---
+    input_worksheet = sheet.worksheet(input_sheet_name)
+    output_worksheet = sheet.worksheet(output_sheet_name)
 
-        output_data = [
-            date_input.strftime('%Y-%m-%d %H:%M:%S'), username, estate_name,
-            blok_name, current_daily_rainfall, peilscale, last_fertilizer,
-            last_fert_date_str, # Use formatted string
-            next_fertilizer,
-            next_fert_date_str, # Use formatted string
-            status, reason, recommendation
-        ]
-        sheet_output.append_row(output_data)
-        print("Analysis results appended to spreadsheet.")
-        return status
-    except Exception as e:
-         messagebox.showerror("Error", f"Gagal menyimpan hasil ke spreadsheet: {e}")
-         print(f"Error appending to spreadsheet: {e}")
-         return "Error"
+    df_input = pd.DataFrame(input_worksheet.get_all_records())
+    df_output = pd.DataFrame(output_worksheet.get_all_records())
 
-# NOTE: The remove_old_data function interacts directly with the sheet by row number.
-# This can be brittle if the sheet structure changes or rows are manually deleted/inserted.
-# Consider using gspread's batch_update or finding rows by criteria before deleting if needed.
-def remove_old_data(df, date_to_remove, estate_name):
-    """Removes data for a specific date and estate from DataFrame and Spreadsheet."""
-    global sheet_data
-    if sheet_data is None: return df # Cannot modify sheet if not connected
-
-    try:
-        date_to_remove_dt = pd.to_datetime(date_to_remove).normalize() # Ensure consistent datetime for comparison
-        date_str_format = date_to_remove_dt.strftime('%d/%m/%Y') # Format for finding in sheet
-
-        # Remove from DataFrame
-        original_len = len(df)
-        indices_to_drop = df[(df['Estate'] == estate_name) & (df['Date'] == date_to_remove_dt)].index
-        if not indices_to_drop.empty:
-            df.drop(indices_to_drop, inplace=True)
-            print(f"Removed {len(indices_to_drop)} row(s) from DataFrame for {estate_name} on {date_str_format}")
-        else:
-             print(f"No matching row found in DataFrame for {estate_name} on {date_str_format}")
-
-
-        # Remove from spreadsheet (find all matching rows and delete)
-        # Use findall to get all matching cells for the date in the first column
-        cells = sheet_data.findall(date_str_format, in_column=1)
-        rows_to_delete_sheet = []
-        if cells:
-            for cell in cells:
-                row_data = sheet_data.row_values(cell.row)
-                # Check if the estate in that row also matches
-                if len(row_data) > 1 and row_data[1] == estate_name: # Assuming Estate is in column 2 (index 1)
-                    rows_to_delete_sheet.append(cell.row)
-
-        if rows_to_delete_sheet:
-            # Sort rows in descending order to avoid index shifting issues during deletion
-            rows_to_delete_sheet.sort(reverse=True)
-            for row_num in rows_to_delete_sheet:
-                 try:
-                     sheet_data.delete_rows(row_num)
-                     print(f"Deleted row {row_num} from spreadsheet for {estate_name} on {date_str_format}")
-                 except Exception as delete_err:
-                     print(f"Error deleting row {row_num} from spreadsheet: {delete_err}")
-                     # Decide if you want to stop or continue if a deletion fails
-                     # return df # Example: Stop if deletion fails
-
-        else:
-            print(f"Data for {date_str_format} and estate {estate_name} not found in spreadsheet for deletion.")
-
-        return df.reset_index(drop=True) # Reset index after dropping rows
-
-    except Exception as e:
-        messagebox.showerror("Error", f"Gagal menghapus data lama: {e}")
-        print(f"Error in remove_old_data: {e}")
-        return df # Return original df on error
-
-
+    return df_input, df_output
 
 # %%
 def analyze_fertilizer(date_input, username, estate_name, blok_name, df, peilscale, last_fertilizer, last_fertilizer_date, next_fertilizer, next_fertilizer_date):
@@ -1069,14 +969,7 @@ def start_main_app():
     # --- Load Initial Data ---
     print("Loading initial data...")
     load_database(SHEET_URL, JSON_PATH)
-
-    # --- Check if sheets loaded ---
-    if not input_sheets or not output_sheets:
-        messagebox.showerror("Startup Error", "Gagal memuat data awal.\nAplikasi akan ditutup.")
-        if root: root.destroy()
-        return
-    print("Data loaded successfully.")
-
+    
     # --- Now create the main application widgets ---
     create_main_widgets()
 
@@ -1094,18 +987,7 @@ def create_main_widgets():
     root.columnconfigure(0, weight=1)
     root.columnconfigure(1, weight=0)
     # --- END CONFIGURATION ---
-
-    # --- Load Initial Data ---
-    print("Loading initial data...")
-    load_database(SHEET_URL, JSON_PATH)
-
-    # --- Check if sheets loaded ---
-    if not input_sheets or not output_sheets:
-        messagebox.showerror("Startup Error", "Gagal memuat data awal.\nAplikasi akan ditutup.")
-        if root: root.destroy()
-        return
-    print("Data loaded successfully.")
-
+    
     # --- Username Section ---
     row_offset = 0 # Start widgets at row 0
     if not username:
@@ -2100,7 +1982,8 @@ def submit_estate(selected_estate):
 
 # %%
 def goto_chosen_menu():
-    global previous_menu, entry_username, combobox_menu_qa, combobox_chosen_year
+    global previous_menu, entry_username, combobox_menu_qa, combobox_chosen_year, df_input, df_output
+
     if not root_exists: return
 
     # --- ROW & COLUMN CONFIGURATION RESET ---
@@ -2127,11 +2010,19 @@ def goto_chosen_menu():
     if not chosen_year.strip():
         messagebox.showerror("Error", "Tolong masukkan pilihan tahun.")
         return
-
+    
+    # 4. Hide all widget and set previous menu flag to main menu
     previous_menu = "main"
     hide_all_widgets()
 
     print("combobox_menu_qa", menu_qa)
+
+    # 5 Get the data based on the chosen menu 
+    try:
+        df_input, df_output = load_sheets_for_menu(menu_qa)
+    except Exception as e:
+        messagebox.showerror("Error", f"Gagal memuat data untuk {menu_qa}: {e}")
+        return
 
     if menu_qa == "QA Produksi":
         qa_calculate_production()
@@ -2553,6 +2444,7 @@ def main_process():
     # Define all globals used within this function and others it calls
     global root, previous_menu, root_exists, current_menu, \
            df, input_sheets, output_sheets, df_input_sheets, df_output_sheets, \
+           df_input, df_output, \
            photo_image, \
            username_var, username, \
            input_production, input_nursery, input_chemist, input_fertilizer, \
@@ -2603,6 +2495,8 @@ def main_process():
     output_sheets = None
     df_input_sheets = None
     df_output_sheets = None
+    df_input = None 
+    df_output = None
 
     # --- Initialize Widget References (Good Practice) ---
     # (Keep the list of widget=None assignments here)
@@ -2729,14 +2623,7 @@ def main_process():
     # --- Load Initial Data ---
     print("Loading initial data...")
     load_database(SHEET_URL, JSON_PATH)
-
-    # --- Check if sheets loaded ---
-    if not input_sheets or not output_sheets:
-        messagebox.showerror("Startup Error", "Gagal memuat data awal.\nAplikasi akan ditutup.")
-        if root: root.destroy()
-        return
-    print("Data loaded successfully.")
-
+    
     # --- Setup Window Closing Protocol ---
     root.protocol("WM_DELETE_WINDOW", on_closing)
     root.columnconfigure(0, weight=1) # Configure root column initially
