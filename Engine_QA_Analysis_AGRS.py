@@ -32,7 +32,7 @@ from reportlab.lib.utils import ImageReader
 # GUI Libraries
 import tkinter as tk
 from tkinter import ttk, messagebox, StringVar
-from tkcalendar import Calendar
+# from reportlab import Calendar
 from PIL import Image, ImageTk
 
 # %% [markdown]
@@ -49,11 +49,15 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 # --- Authentication ---
-JSON_PATH = resource_path('enginewaktuaplikasipemupukan-03e33861bae9.json') # Make sure file exists
-SHEET_URL = "https://docs.google.com/spreadsheets/d/19GOqS3y20sZYexBgaFQOavCaktXIYZD7cpVSsH9sL9o/edit?usp=sharing"
+JSON_PATH = resource_path('enginewaktuaplikasipemupukan-03e33861bae9.json')
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1yCrPTPT6xVMEAYs7d31Vya0GhxQ_AySbfg-CXD7UaMw/edit?usp=sharing"
 SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 SPLASH_IMAGE = resource_path('bgqa.png')
 FOLDER_ID = "1_OgkeR2Iooh9dyoIC6gskIYnJnt8qyJ6"
+
+# --- Sheets ---
+SHEET_NAMES_INPUT = ["Input - Production", "Input - Nursery", "Input - Chemist", "Input - Fertilizer"]
+SHEET_NAMES_OUTPUT = ["Output - Production", "Output - Nursery", "Output - Chemist", "Output - Fertilizer"]
 
 # --- Fertilizer Data ---
 FERTILIZER_GROUPS = {
@@ -264,8 +268,14 @@ username_var = None # Will be StringVar, created in main_process
 username = ""     # Will store the string username
 
 # --- Google Sheets Objects ---
-sheet_data = None   # DB sheet object
-sheet_output = None # Output sheet object
+input_production = None
+input_nursery = None
+input_chemist = None
+input_fertilizer = None 
+output_production = None
+output_nursery = None
+output_chemist = None
+output_fertilizer = None
 
 # --- GUI State ---
 success_window = None
@@ -282,57 +292,54 @@ missing_dates_widgets = {}
 
 # %%
 def load_database(sheet_url, json_path):
-    """Loads data from the Google Sheet 'DB' worksheet into a Pandas DataFrame."""
-    global sheet_data, sheet_output # Keep sheet objects global for calculation/output functions
+    """
+    Connects to Google Sheets and loads input and output sheets separately.
+    Each input and output sheet is saved into its own DataFrame or worksheet object.
+    """
+    global input_sheets, output_sheets
+    global df_input_sheets, df_output_sheets
+
     try:
+        # Authenticate and connect
         creds = ServiceAccountCredentials.from_json_keyfile_name(json_path, SCOPE)
         client = gspread.authorize(creds)
-        sheet_data = client.open_by_url(sheet_url).worksheet("DB")
-        sheet_output = client.open_by_url(sheet_url).worksheet("Output") # Get output sheet handle too
-        data = sheet_data.get_all_records()
-        df_loaded = pd.DataFrame(data)
+        sheet = client.open_by_url(sheet_url)
 
-        # Data type conversions and cleaning
-        if 'Date' in df_loaded.columns:
-            df_loaded['Date'] = pd.to_datetime(df_loaded['Date'], format='%d/%m/%Y', errors='coerce')
-            df_loaded.dropna(subset=['Date'], inplace=True)
-        else:
-             messagebox.showerror("Data Error", "Kolom 'Date' tidak ditemukan di spreadsheet.")
-             return pd.DataFrame()
+        # --- Load Input Sheets ---
+        input_sheets = {}
+        df_input_sheets = {}
+        for name in SHEET_NAMES_INPUT:
+            try:
+                worksheet = sheet.worksheet(name)
+                input_sheets[name] = worksheet
+                # Also load as DataFrame immediately
+                df = pd.DataFrame(worksheet.get_all_records())
+                if not df.empty and 'Tanggal Periksa' in df.columns:
+                    df['Tanggal Periksa'] = pd.to_datetime(df['Tanggal Periksa'], format='%d/%m/%Y', errors='coerce')
+                    df.dropna(subset=['Tanggal Periksa'], inplace=True)
+                df_input_sheets[name] = df
+            except gspread.WorksheetNotFound:
+                print(f"Warning: Input sheet '{name}' not found.")
+                input_sheets[name] = None
+                df_input_sheets[name] = pd.DataFrame()
 
-        if 'Daily Rainfall (mm)' in df_loaded.columns:
-            df_loaded['Daily Rainfall (mm)'] = pd.to_numeric(df_loaded['Daily Rainfall (mm)'], errors='coerce')
-            # Optionally handle NaNs in rainfall here (e.g., fillna(0) or dropna())
-            # df_loaded['Daily Rainfall (mm)'].fillna(0, inplace=True)
-        else:
-            messagebox.showerror("Data Error", "Kolom 'Daily Rainfall (mm)' tidak ditemukan di spreadsheet.")
-            return pd.DataFrame()
+        # --- Load Output Sheets ---
+        output_sheets = {}
+        df_output_sheets = {}
+        for name in SHEET_NAMES_OUTPUT:
+            try:
+                worksheet = sheet.worksheet(name)
+                output_sheets[name] = worksheet
+                # If you want to preload output data (optional)
+                df_output_sheets[name] = pd.DataFrame(worksheet.get_all_records())
+            except gspread.WorksheetNotFound:
+                print(f"Warning: Output sheet '{name}' not found.")
+                output_sheets[name] = None
+                df_output_sheets[name] = pd.DataFrame()
 
-        # Ensure all calculation columns exist, add them with default NaN or 0 if not
-        calc_columns = ['Accumulation Rainfall -29 days', 'Evapotranspiration',
-                        'Water Balance', 'Soil Water Reserve (mm)', 'Water Surplus']
-        for col in calc_columns:
-            if col not in df_loaded.columns:
-                df_loaded[col] = pd.NA # Or 0 if preferred
-
-        # Convert calculation columns to numeric, coercing errors
-        for col in calc_columns:
-             df_loaded[col] = pd.to_numeric(df_loaded[col], errors='coerce')
-
-
-        return df_loaded.sort_values(by='Date').reset_index(drop=True) # Ensure data is sorted
-
-    except gspread.exceptions.SpreadsheetNotFound:
-        messagebox.showerror("Connection Error", f"Spreadsheet tidak ditemukan: {sheet_url}")
-        return pd.DataFrame()
-    except gspread.exceptions.APIError as e:
-        messagebox.showerror("Connection Error", f"Kesalahan API Google Sheets: {e}")
-        return pd.DataFrame()
     except Exception as e:
-        messagebox.showerror("Error", f"Kesalahan saat memuat data: {e}")
-        print(f"An unexpected error occurred loading data: {e}")
-        traceback.print_exc() # Print full traceback for debugging
-        return pd.DataFrame()
+        messagebox.showerror("Error", f"Gagal memuat data: {e}")
+        print(traceback.format_exc())
 
 def append_to_spreadsheet(date_input, username, estate_name, blok_name, current_daily_rainfall, peilscale, last_fertilizer, last_fertilizer_date, next_fertilizer, next_fertilizer_date, reason, recommendation):
     """Appends analysis results to the 'Output' Google Sheet."""
@@ -510,7 +517,35 @@ def analyze_fertilizer(date_input, username, estate_name, blok_name, df, peilsca
   return current_daily_rainfall, status, reason, recommendation
 
 # %% [markdown]
-#  ## 6. Core Logic - Rainfall & Water Balance
+#  ## 6. Core Logic
+#  
+
+# %%
+def analyse_qa_production(combobox_estate, 
+                          entry_divisi,
+                          entry_blok,
+                          pokok_sample_float,
+                          pokok_panen_float,
+                          actual_float,
+                          budget_float,
+                          janjang_panen_float,
+                          janjang_tertinggal_float,
+                          berondolan_tertinggal_float,
+                          janjang_tertinggal_mobil_float,
+                          berondolan_tertinggal_mobil_float,
+                          rotasi_panen_float,
+                          restan_float,
+                          jaring_float,
+                          produktivitas_pemanen_float,
+                          administrasi_panen_float,
+                          kualitas_tbs_float,
+                          muatan_overload_float,
+                          upload_note_float):
+    
+    # Actual vs Budget
+    # Selisih nya * persen rule
+
+    return True
 
 # %%
 import datetime # Ensure import
@@ -1031,7 +1066,7 @@ def validate_rainfall_data_exists(selected_estate):
 # %%
 def create_splash_screen():
     """Creates and displays the splash screen."""
-    global splash_label, splash_button, root
+    global splash_label, splash_button, root, photo_image
 
     if not root_exists: return
 
@@ -1087,13 +1122,11 @@ def create_splash_screen():
 
     except FileNotFoundError:
          messagebox.showerror("Error", f"Splash image file not found: {image_path}")
-         # Optionally call start_main_app() immediately to bypass splash on error
-         root.after(100, start_main_app) # Start app after short delay
+         root.after(100, start_main_app)
     except Exception as e:
         messagebox.showerror("Splash Screen Error", f"Could not load splash screen: {e}")
         traceback.print_exc()
-        # Optionally call start_main_app() immediately to bypass splash on error
-        root.after(100, start_main_app) # Start app after short delay
+        root.after(100, start_main_app)
 
 
 # %%
@@ -1109,29 +1142,16 @@ def start_main_app():
     if splash_button:
         splash_button.destroy()
 
-    # --- Connect to Google Sheets and Load Initial Data ---
-    # Moved here from main_process to avoid delay before splash shows
-    try:
-        print("Connecting to Google Sheets...") # Feedback
-        creds = ServiceAccountCredentials.from_json_keyfile_name(JSON_PATH, SCOPE)
-        client = gspread.authorize(creds)
-        sheet_data = client.open_by_url(SHEET_URL).worksheet("DB")
-        sheet_output = client.open_by_url(SHEET_URL).worksheet("Output")
-        print("Successfully connected to Google Sheets.")
-    except Exception as e:
-        messagebox.showerror("Startup Error", f"Gagal terhubung ke Google Sheets: {e}\nAplikasi akan ditutup.")
-        if root: root.destroy()
-        return
-
     # --- Load Initial Data ---
-    print("Loading initial data...") # Feedback
-    df = load_database(SHEET_URL, JSON_PATH) # load_database now gets sheet handles
-    if df.empty:
-        # load_database shows its own error, just ensure window closes
+    print("Loading initial data...")
+    load_database(SHEET_URL, JSON_PATH)
+
+    # --- Check if sheets loaded ---
+    if not input_sheets or not output_sheets:
         messagebox.showerror("Startup Error", "Gagal memuat data awal.\nAplikasi akan ditutup.")
         if root: root.destroy()
         return
-    print("Data loaded successfully.") # Feedback
+    print("Data loaded successfully.")
 
     # --- Now create the main application widgets ---
     create_main_widgets()
@@ -1151,12 +1171,16 @@ def create_main_widgets():
     root.columnconfigure(1, weight=0)
     # --- END CONFIGURATION ---
 
-    # Update the dataframe every time user access the main menu
-    df = load_database(SHEET_URL, JSON_PATH) # Use constants
-    if df.empty:
-        messagebox.showerror("Error", "Gagal memuat data dari spreadsheet...")
-        root.destroy()
+    # --- Load Initial Data ---
+    print("Loading initial data...")
+    load_database(SHEET_URL, JSON_PATH)
+
+    # --- Check if sheets loaded ---
+    if not input_sheets or not output_sheets:
+        messagebox.showerror("Startup Error", "Gagal memuat data awal.\nAplikasi akan ditutup.")
+        if root: root.destroy()
         return
+    print("Data loaded successfully.")
 
     # --- Username Section ---
     row_offset = 0 # Start widgets at row 0
@@ -1642,77 +1666,171 @@ def show_add_rainfall_entry(selected_estate, date):
 #  ## 10. GUI - Navigation & Action Functions
 
 # %%
-# (Keep functions: goto_update_rainfall, goto_add_rainfall, submit_estate,
-#  submit_estate_for_analysis, submit_analysis, go_to_reanalyze, back_to_main,
-#  go_back, check_existing_rainfall, submit_estate_for_add_rainfall,
-#  submit_update_rainfall, show_success_window, close_success_and_go_back,
-#  submit_missing_dates)
-
-# Make corrections to submit_analysis date handling:
-def submit_analysis(selected_estate, blok, peilscale,
-                    jenis_pupuk_terakhir, tanggal_pupuk_terakhir_str, # Renamed for clarity
-                    rencana_jenis_pupuk, tanggal_rencana_pupuk_str): # Renamed for clarity
-    global df, current_time_date, username_var # Added username_var
+def submit_production_analysis(): 
+    global username_var, combobox_estate, entry_divisi, entry_blok, entry_pokok_sample, entry_pokok_panen, entry_actual, entry_budget, \
+           entry_janjang_panen, entry_janjang_tertinggal, entry_berondolan_tertinggal, entry_janjang_tertinggal_mobil, \
+           entry_berondolan_tertinggal_mobil, entry_rotasi_panen, entry_restan, entry_jaring, entry_produktivitas_pemanen, \
+           entry_administrasi_panen, entry_kualitas_tbs, entry_muatan_overload, entry_upload_note
 
     if not root_exists: return
 
     # --- Basic Input Validation ---
-    # (Keep all the initial checks for empty strings, valid estate etc.)
-    if not selected_estate: messagebox.showerror("Error", "Tolong masukkan nama estate."); return
-    if selected_estate not in ESTATE_OPTIONS: messagebox.showerror("Error", f"Nama estate invalid: '{selected_estate}'."); return
-    if not blok: messagebox.showerror("Error", "Tolong masukkan nama blok."); return
-    if not tanggal_rencana_pupuk_str: messagebox.showerror("Error", "Tolong masukkan tanggal rencana pupuk."); return
-    if not peilscale: messagebox.showerror("Error", "Masukkan nilai peilscale."); return
-    if not tanggal_pupuk_terakhir_str: messagebox.showerror("Error", "Tolong masukkan tanggal pupuk terakhir."); return
-    if not jenis_pupuk_terakhir: messagebox.showerror("Error", "Tolong masukkan jenis pupuk terakhir."); return
-    if not rencana_jenis_pupuk: messagebox.showerror("Error", "Tolong masukkan rencana jenis pupuk."); return
+    if not combobox_estate.get(): messagebox.showerror("Error", "Tolong masukkan nama estate."); return
+    if combobox_estate.get() not in ESTATE_OPTIONS: messagebox.showerror("Error", f"Nama estate invalid: '{combobox_estate.get()}'."); return
+    if not entry_divisi.get(): messagebox.showerror("Error", "Tolong masukkan nama divisi."); return
+    if not entry_blok.get(): messagebox.showerror("Error", "Tolong masukkan nama blok."); return
+    if not entry_pokok_sample.get(): messagebox.showerror("Error", "Tolong masukkan pokok sample."); return
+    if not entry_pokok_panen.get(): messagebox.showerror("Error", "Tolong masukkan pokok panen."); return
+    if not entry_actual.get(): messagebox.showerror("Error", "Tolong masukkan produksi actual."); return
+    if not entry_budget.get(): messagebox.showerror("Error", "Tolong masukkan budget produksi."); return
+    if not entry_janjang_panen.get(): messagebox.showerror("Error", "Tolong masukkan jumlah janjang terpanen."); return
+    if not entry_janjang_tertinggal.get(): messagebox.showerror("Error", "Tolong masukkan jumlah janjang tertinggal."); return
+    if not entry_berondolan_tertinggal.get(): messagebox.showerror("Error", "Tolong masukkan jumlah berondolan tertinggal."); return
+    if not entry_janjang_tertinggal_mobil.get(): messagebox.showerror("Error", "Tolong masukkan jumlah janjang tertinggal di mobil."); return
+    if not entry_berondolan_tertinggal_mobil.get(): messagebox.showerror("Error", "Tolong masukkan jumlah berondolan tertinggal di mobil."); return
+    if not entry_rotasi_panen.get(): messagebox.showerror("Error", "Tolong masukkan rotasi panen."); return
+    if not entry_restan.get(): messagebox.showerror("Error", "Tolong masukkan nilai restan."); return
+    if not entry_jaring.get(): messagebox.showerror("Error", "Tolong masukkan jumlah jaring."); return
+    if not entry_produktivitas_pemanen.get(): messagebox.showerror("Error", "Tolong masukkan nilai produktivitas pemanen."); return
+    if not entry_administrasi_panen.get(): messagebox.showerror("Error", "Tolong masukkan nilai administrasi panen."); return
+    if not entry_kualitas_tbs.get(): messagebox.showerror("Error", "Tolong masukkan nilai kualitas TBS."); return
+    if not entry_muatan_overload.get(): messagebox.showerror("Error", "Tolong masukkan jumlah muatan overload."); return
+    if not entry_upload_note.get(): messagebox.showerror("Error", "Tolong masukkan rencana jenis pupuk."); return
 
-    # --- Type/Format Validation ---
-    try:
-        # Use %Y-%m-%d as returned by tkcalendar's get_date()
-        tanggal_rencana_pupuk_dt = datetime.datetime.strptime(tanggal_rencana_pupuk_str, "%Y-%m-%d")
-        tanggal_pupuk_terakhir_dt = datetime.datetime.strptime(tanggal_pupuk_terakhir_str, "%Y-%m-%d")
-    except ValueError:
-        # Try the other format just in case user typed it manually
-        try:
-             tanggal_rencana_pupuk_dt = datetime.datetime.strptime(tanggal_rencana_pupuk_str, "%d/%m/%Y")
-             tanggal_pupuk_terakhir_dt = datetime.datetime.strptime(tanggal_pupuk_terakhir_str, "%d/%m/%Y")
-             # If manual format is okay, maybe warn user about preferred format?
-        except ValueError:
-             messagebox.showerror("Error", "Format tanggal tidak valid. Gunakan kalender atau format YYYY-MM-DD.")
-             return
-
-    try:
-        peilscale_int = int(peilscale) # Keep original peilscale string for display if needed
-    except ValueError:
-        messagebox.showerror("Error", "Nilai peilscale harus berupa angka integer.")
-        return
-
-    # --- Username Check ---
     username = username_var.get()
     if not username.strip():
         messagebox.showerror("Error", "Tolong masukkan username di dalam main menu.")
         return
-
-    # --- Rainfall Data Validation ---
-    if not validate_rainfall_data_exists(selected_estate):
-        return # Exit if rainfall validation fails
-
-    # --- Proceed with analysis ---
-    current_daily_rainfall, status, reason, recommendation = analyze_fertilizer(
-        datetime.datetime.now(CURRENT_TIMEZONE), username, selected_estate, blok, df,
-        peilscale_int, jenis_pupuk_terakhir, tanggal_pupuk_terakhir_dt, # Pass datetime object
-        rencana_jenis_pupuk, tanggal_rencana_pupuk_dt # Pass datetime object
-    )
-
+    
+    try:
+        pokok_sample_float = float(entry_pokok_sample)
+    except ValueError:
+        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        return
+    
+    try:
+        pokok_panen_float = float(entry_pokok_panen)
+    except ValueError:
+        messagebox.showerror("Error", "Nilai pokok panen harus berupa angka.")
+        return
+    
+    try:
+        actual_float = float(entry_actual)
+    except ValueError:
+        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        return
+    
+    try:
+        budget_float = float(entry_budget)
+    except ValueError:
+        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        return
+    
+    try:
+        janjang_panen_float = float(entry_janjang_panen)
+    except ValueError:
+        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        return
+    
+    try:
+        janjang_tertinggal_float = float(entry_janjang_tertinggal)
+    except ValueError:
+        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        return
+    
+    try:
+        berondolan_tertinggal_float = float(entry_berondolan_tertinggal)
+    except ValueError:
+        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        return
+    
+    try:
+        janjang_tertinggal_mobil_float = float(entry_janjang_tertinggal_mobil)
+    except ValueError:
+        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        return
+    
+    try:
+        berondolan_tertinggal_mobil_float = float(entry_berondolan_tertinggal_mobil)
+    except ValueError:
+        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        return
+    
+    try:
+        rotasi_panen_float = float(entry_rotasi_panen)
+    except ValueError:
+        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        return
+    
+    try:
+        restan_float = float(entry_restan)
+    except ValueError:
+        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        return
+    
+    try:
+        jaring_float = float(entry_jaring)
+    except ValueError:
+        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        return
+    
+    try:
+        produktivitas_pemanen_float = float(entry_produktivitas_pemanen)
+    except ValueError:
+        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        return
+    
+    try:
+        administrasi_panen_float = float(entry_administrasi_panen)
+    except ValueError:
+        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        return
+    
+    try:
+        kualitas_tbs_float = float(entry_kualitas_tbs)
+    except ValueError:
+        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        return
+    
+    try:
+        muatan_overload_float = float(entry_muatan_overload)
+    except ValueError:
+        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        return
+    
+    try:
+        upload_note_float = float(entry_upload_note)
+    except ValueError:
+        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        return
+    
+    analyse_qa_production(combobox_estate.get(), 
+                          entry_divisi.get(),
+                          entry_blok.get(),
+                          pokok_sample_float,
+                          pokok_panen_float,
+                          actual_float,
+                          budget_float,
+                          janjang_panen_float,
+                          janjang_tertinggal_float,
+                          berondolan_tertinggal_float,
+                          janjang_tertinggal_mobil_float,
+                          berondolan_tertinggal_mobil_float,
+                          rotasi_panen_float,
+                          restan_float,
+                          jaring_float,
+                          produktivitas_pemanen_float,
+                          administrasi_panen_float,
+                          kualitas_tbs_float,
+                          muatan_overload_float,
+                          upload_note_float)
+    
     # Display the results - Pass strings for display as they were entered/selected
     display_analysis_results(
         selected_estate, blok, tanggal_rencana_pupuk_str, peilscale, # Pass original peilscale string
         tanggal_pupuk_terakhir_str, jenis_pupuk_terakhir, rencana_jenis_pupuk,
         username, current_daily_rainfall, status, reason, recommendation
     )
-
-
 
 # %%
 def submit_missing_dates(selected_estate, missing_dates_list):
@@ -2397,7 +2515,7 @@ def qa_calculate_production():
     submit_pdf_button.grid(row=row, column=0, padx=10, pady=10, sticky="ew")
     row += 1
 
-    submit_calculation_production_button = tk.Button(scrollable_frame, text="Submit", command=lambda: submit_analysis(
+    submit_calculation_production_button = tk.Button(scrollable_frame, text="Submit", command=lambda: submit_production_analysis(
         combobox_estate.get(),
         entry_blok.get(),
         entry_peilscale.get(),
@@ -2517,9 +2635,12 @@ def disable_buttons():
 # %%
 def main_process():
     # Define all globals used within this function and others it calls
-    global root, previous_menu, root_exists, current_menu, df, \
+    global root, previous_menu, root_exists, current_menu, \
+           df, input_sheets, output_sheets, df_input_sheets, df_output_sheets, \
+           photo_image, \
            username_var, username, \
-           sheet_data, sheet_output, \
+           input_production, input_nursery, input_chemist, input_fertilizer, \
+           output_production, output_nursery , output_chemist, output_fertilizer, \
            label_username, entry_username, exit_button, label_rainfall_option, \
            button_update_rainfall, button_add_rainfall, back_button, \
            label_menu_qa, combobox_menu_qa, label_chosen_year, combobox_chosen_year, label_note_year, \
@@ -2560,7 +2681,12 @@ def main_process():
     root_exists = True
     current_menu = None
     df = pd.DataFrame()
-    missing_dates_widgets = {} # Ensure this is initialized
+    missing_dates_widgets = {}
+    photo_image = None
+    input_sheets = None
+    output_sheets = None
+    df_input_sheets = None
+    df_output_sheets = None
 
     # --- Initialize Widget References (Good Practice) ---
     # (Keep the list of widget=None assignments here)
@@ -2665,8 +2791,19 @@ def main_process():
     try:
         creds = ServiceAccountCredentials.from_json_keyfile_name(JSON_PATH, SCOPE)
         client = gspread.authorize(creds)
-        sheet_data = client.open_by_url(SHEET_URL).worksheet("DB")
-        sheet_output = client.open_by_url(SHEET_URL).worksheet("Output")
+
+        # Sheets for input
+        input_production = client.open_by_url(SHEET_URL).worksheet("Input - Production")
+        input_nursery = client.open_by_url(SHEET_URL).worksheet("Input - Nursery")
+        input_chemist = client.open_by_url(SHEET_URL).worksheet("Input - Chemist")
+        input_fertilizer = client.open_by_url(SHEET_URL).worksheet("Input - Fertilizer")
+
+        # Sheets for output
+        output_production = client.open_by_url(SHEET_URL).worksheet("Output - Production")
+        output_nursery = client.open_by_url(SHEET_URL).worksheet("Output - Nursery")
+        output_chemist = client.open_by_url(SHEET_URL).worksheet("Output - Chemist")
+        output_fertilizer = client.open_by_url(SHEET_URL).worksheet("Output - Fertilizer")
+
         print("Successfully connected to Google Sheets.")
     except Exception as e:
         messagebox.showerror("Startup Error", f"Gagal terhubung ke Google Sheets: {e}")
@@ -2674,12 +2811,15 @@ def main_process():
         return
 
     # --- Load Initial Data ---
-    df = load_database(SHEET_URL, JSON_PATH) # load_database now gets sheet handles
-    if df.empty:
-        # load_database shows its own error, just ensure window closes
-        messagebox.showerror("Startup Error", "Gagal memuat data awal. Aplikasi akan ditutup.")
-        root.destroy()
+    print("Loading initial data...")
+    load_database(SHEET_URL, JSON_PATH)
+
+    # --- Check if sheets loaded ---
+    if not input_sheets or not output_sheets:
+        messagebox.showerror("Startup Error", "Gagal memuat data awal.\nAplikasi akan ditutup.")
+        if root: root.destroy()
         return
+    print("Data loaded successfully.")
 
     # --- Setup Window Closing Protocol ---
     root.protocol("WM_DELETE_WINDOW", on_closing)
