@@ -58,65 +58,44 @@ FOLDER_ID = "1_OgkeR2Iooh9dyoIC6gskIYnJnt8qyJ6"
 # --- Sheets ---
 SHEET_NAMES_INPUT = ["Input - Production", "Input - Nursery", "Input - Chemist", "Input - Fertilizer"]
 SHEET_NAMES_OUTPUT = ["Output - Production", "Output - Nursery", "Output - Chemist", "Output - Fertilizer"]
+SHEET_NAMES_OUTPUT_WEIGHT = ["Output (Weight) - Production", "Output (Weight) - Nursery", "Output (Weight) - Chemist", "Output (Weight) - Fertilizer"]
 
-# --- Fertilizer Data ---
-FERTILIZER_GROUPS = {
-    "NPK": ["NPK 13", "NPK 15", "NPK 12"],
-    "Dolomite": ["Dolomite"],
-    "Urea": ["Urea"],
-    "MOP": ["MOP"],
-    "HGFB": ["HGFB"],
-    "CuSO4": ["CuSO4"],
-    "Zincop": ["Zincop Chelated"],
-    "Kieserite": ["Kieserite"],
-    "RP": ["RP"],
-    "Kaptan": ["Kaptan"],
-    "TSP": ["TSP"]
-}
-
-SYNERGIZE_GROUPS = { # Note: This dictionary seems less used in the provided core analysis logic
-    "NPK": ["Urea", "Kieserite", "MOP"],
-    "Urea": ["NPK", "Kieserite", "MOP"],
-    "RP": ["Kieserite", "Dolomite"],
-    "Kieserite": ["NPK", "Urea", "RP"],
-    "Dolomite": ["Kaptan", "RP"],
-    "MOP": ["NPK", "Urea"],
-    "HGFB": ["Zincop Chelated", "CuSO4"],
-    "Zincop": ["HGFB", "CuSO4"],
-    "CuSO4": ["HGFB", "Zincop"],
-    "Kaptan": ["Dolomite"],
-}
-
-SUPER_SLOW = {
-    "Dolomite": ["Dolomite"]
-}
-
-HYGROSCOPIC = {
-    "Urea": ["Urea"],
-    "HGFB": ["HGFB"],
-    "CuSO4": ["CuSO4"],
-    "MOP": ["MOP"]
+MAPPING_SCORE_TO_DESC = {
+    "score_actual_budget": "Pencapaian Produksi",
+    "score_buah_tinggal": "Kualitas Panen - TBS Tertinggal",
+    "score_berondolan_tinggal": "Kualitas Panen - LF Tertinggal",
+    "score_buah_tinggal_tph": "Kualitas Transport - Jjg di TPH",
+    "score_berondolan_tinggal_tph": "Kualitas Transport - LF di TPH",
+    "score_rotasi_perbulan": "Rotasi Panen",
+    "score_restan": "Restan",
+    "score_jaring": "Pemakaian Jaring/Terpal",
+    "score_produktivitas_pemanen": "Produktivitas Pemenen",
+    "score_administrasi_panen": "Administrasi Panen",
+    "score_kualitas_tbs": "Kualitas TBS",
+    "score_muatan_overload": "Muatan Overload"
 }
 
 ESTATE_OPTIONS = ["Inti", "Plasma"] # Use constant for options
 
-INTERVAL_TABLE = {
-    "NPK": {"NPK": 60, "Urea": 14, "RP": 30, "TSP": 30, "Kieserite": 14, "Dolomite": 30, "MOP": 14, "HGFB": 30, "Zincop": 30},
-    "Urea": {"NPK": 14, "Urea": 60, "RP": 30, "TSP": 30, "Kieserite": 14, "Dolomite": 30, "MOP": 14, "HGFB": 30, "Zincop": 30},
-    "RP": {"NPK": 30, "Urea": 30, "RP": 60, "TSP": 60, "Kieserite": 14, "Dolomite": 14, "MOP": 30, "HGFB": 30, "Zincop": 30},
-    "TSP": {"NPK": 30, "Urea": 30, "RP": None, "TSP": 30, "Kieserite": 30, "Dolomite": 30, "MOP": 30, "HGFB": 30, "Zincop": 30},
-    "Kieserite": {"NPK": 14, "Urea": 14, "RP": 14, "TSP": 30, "Kieserite": 60, "Dolomite": 60, "MOP": 30, "HGFB": 14, "Zincop": 30},
-    "Dolomite": {"NPK": 30, "Urea": 30, "RP": 14, "TSP": 30, "Kieserite": None, "Dolomite": 30, "MOP": 30, "HGFB": 30, "Zincop": 30},
-    "MOP": {"NPK": 14, "Urea": 14, "RP": 30, "TSP": 30, "Kieserite": 30, "Dolomite": 30, "MOP": 60, "HGFB": 30, "Zincop": 30},
-    "HGFB": {"NPK": 30, "Urea": 30, "RP": 30, "TSP": 30, "Kieserite": 14, "Dolomite": 30, "MOP": 30, "HGFB": 60, "Zincop": 14},
-    "Zincop": {"NPK": 30, "Urea": 30, "RP": 30, "TSP": 30, "Kieserite": 30, "Dolomite": 30, "MOP": 30, "HGFB": 14, "Zincop": 60},
+YEARLY_WEIGHT_PRODUCTION = {
+    "Pencapaian Produksi": {"2025": "20%", "2026": "18%", "2027": "15%"},
+    "Kualitas Panen - TBS Tertinggal": {"2025": "15%", "2026": "13%", "2027": "12%"},
+    "Kualitas Panen - LF Tertinggal": {"2025": "15%", "2026": "13%", "2027": "12%"},
+    "Kualitas Transport - Jjg di TPH": {"2025": "10%", "2026": "8%", "2027": "4%"},
+    "Kualitas Transport - LF di TPH": {"2025": "10%", "2026": "8%", "2027": "4%"},
+    "Rotasi Panen": {"2025": "15%", "2026": "13%", "2027": "12%"},
+    "Restan": {"2025": "10%", "2026": "10%", "2027": "10%"},
+    "Pemakaian Jaring/Terpal": {"2025": "5%", "2026": "5%", "2027": "5%"},
+    "Produktivitas Pemenen": {"2025": "0%", "2026": "7%", "2027": "4%"},
+    "Administrasi Panen": {"2025": "0%", "2026": "5%", "2027": "5%"},
+    "Kualitas TBS": {"2025": "0%", "2026": "0%", "2027": "12%"},
+    "Muatan Overload": {"2025": "0%", "2026": "0%", "2027": "5%"},
 }
 
-FERTILIZER_TYPE = ["NPK 13", "NPK 15", "NPK 12", "Dolomite", "Urea", "MOP", "HGFB", "CuSO4", "Zincop Chelated", "Kieserite", "RP", "Kaptan", "TSP"]
 
 QA_TYPE = ["QA Produksi", "QA Perawatan", "QA Pemupukan", "QA Chemist"]
 
-YEARLY_WEIGHT = ["2025", "2026", "2027"]
+AVAILABLE_YEAR = ["2025", "2026", "2027"]
 
 # --- Styling and Misc ---
 BORDER_LINE = "=" * 80
@@ -250,6 +229,17 @@ def get_missing_dates(df, estate_name, current_time_date): # current_time_date i
 
     return missing_dates, last_reported_time_aware, total_missing_dates
 
+# %%
+def extract_weights_by_year(weights_dict, year):
+    extracted = {}
+
+    for description, year_data in weights_dict.items():
+        if year not in year_data:
+            raise ValueError(f"Year {year} not found in data for '{description}'.")
+        extracted[description] = year_data[year]
+
+    return extracted
+
 # %% [markdown]
 #  ## 4. Global Variables (Application State)
 
@@ -320,20 +310,29 @@ def load_sheets_for_menu(qa_type):
         "QA Chemist": "Output - Chemist",
         "QA Pemupukan": "Output - Fertilizer"
     }
+    mapping_output_weight = {
+        "QA Produksi": "Output (Weight) - Production",
+        "QA Perawatan": "Output (Weight) - Nursery",
+        "QA Chemist": "Output (Weight) - Chemist",
+        "QA Pemupukan": "Output (Weight) - Fertilizer"
+    }
 
     input_sheet_name = mapping_input.get(qa_type)
     output_sheet_name = mapping_output.get(qa_type)
+    output_weight_sheet_name = mapping_output.get(qa_type)
 
-    if not input_sheet_name or not output_sheet_name:
+    if not input_sheet_name or not output_sheet_name or not output_weight_sheet_name:
         raise Exception("QA type tidak dikenali.")
 
     input_worksheet = sheet.worksheet(input_sheet_name)
     output_worksheet = sheet.worksheet(output_sheet_name)
+    output_weight_worksheet = sheet.worksheet(output_sheet_name)
 
     df_input = pd.DataFrame(input_worksheet.get_all_records())
     df_output = pd.DataFrame(output_worksheet.get_all_records())
+    df_output_weight = pd.DataFrame(output_weight_worksheet.get_all_records())
 
-    return df_input, df_output
+    return df_input, df_output, df_output_weight
 
 # %%
 def analyze_fertilizer(date_input, username, estate_name, blok_name, df, peilscale, last_fertilizer, last_fertilizer_date, next_fertilizer, next_fertilizer_date):
@@ -428,31 +427,181 @@ def evaluate_budget_actual(budget, actual):
 
     difference_actual_budget = ((actual - budget) / budget) * 100
 
-    if difference_actual_budget < 70:
-        return 2
-    elif 70 <= difference_actual_budget < 80:
-        return 4
-    elif 80 <= difference_actual_budget < 90:
-        return 6
-    elif 90 <= difference_actual_budget <= 100:
-        return 8
-    elif difference_actual_budget > 100:
+    if difference_actual_budget > 100: # > 100%
         return 10
+    elif 90 <= difference_actual_budget <= 100: # 90 - 100%
+        return 8
+    elif 80 <= difference_actual_budget < 90: # 80 - 90%
+        return 6
+    elif 70 <= difference_actual_budget < 80: # 70 - 80%
+        return 4
+    elif difference_actual_budget < 70: # < 70%
+        return 2
 
 # %%
-def evaluate_buah_tinggal(janjang_tinggal):
+    def evaluate_buah_tinggal(buah_tinggal, pokok_sample):
+        perhitungan_buah_tinggal = (buah_tinggal / pokok_sample) * 100  # percentage
 
-    
+        if perhitungan_buah_tinggal == 0:  # 0%
+            return 10
+        elif 0 < perhitungan_buah_tinggal <= 0.2:  # > 0% - 0.2%
+            return 8
+        elif 0.2 < perhitungan_buah_tinggal <= 0.4:  # > 0.2% - 0.4%
+            return 6
+        elif 0.4 < perhitungan_buah_tinggal <= 0.6:  # > 0.4% - 0.6%
+            return 4
+        elif perhitungan_buah_tinggal > 0.6:  # > 0.6%
+            return 2
 
-    if janjang_tinggal == 0:
+# %%
+def evaluate_berondolan_tinggal(berondolan_tinggal, pokok_sample):
+    perhitungan_berondolan_tinggal = berondolan_tinggal/pokok_sample
+
+    if perhitungan_berondolan_tinggal <= 0.005: # < 0,5 butir/pkk
         return 10
-    elif 0 < janjang_tinggal <= 0.002:
+    elif 0.005 < perhitungan_berondolan_tinggal <= 0.006: # > 0,5 - 0,6 butir/pkk
         return 8
-    elif 0.002 < janjang_tinggal <= 0.004:
+    elif 0.006 < perhitungan_berondolan_tinggal <= 0.0075: # > 0,6 - 0,75 butir/pkk
         return 6
-    elif 0.004 < janjang_tinggal <= 0.006:
+    elif 0.0075 < perhitungan_berondolan_tinggal <= 0.01: # > 0,75 - 1 butir/pkk
         return 4
-    elif janjang_tinggal > 0.006:
+    elif perhitungan_berondolan_tinggal > 0.01: # > 1 butir/pkk
+        return 2
+
+# %%
+def evaluate_buah_tinggal_tph(buah_tinggal_tph, pokok_sample):
+    perhitungan_buah_tinggal_tph = buah_tinggal_tph/pokok_sample
+
+    if perhitungan_buah_tinggal_tph == 0: # 0 jjg
+        return 10
+    elif 0 < perhitungan_buah_tinggal_tph <= 0.002: # > 0 - 0,2 jjg
+        return 8
+    elif 0.002 < perhitungan_buah_tinggal_tph <= 0.004: # > 0,2 - 0,4 jjg
+        return 6
+    elif 0.004 < perhitungan_buah_tinggal_tph <= 0.006: # > 0,4 - 0,6 jjg
+        return 4
+    elif perhitungan_buah_tinggal_tph > 0.006: # > 0,6 jjg
+        return 2
+
+# %%
+def evaluate_berondolan_tinggal_tph(berondolan_tinggal_tph, pokok_sample):
+
+    perhitungan_berondolan_tinggal_tph = berondolan_tinggal_tph/pokok_sample
+
+    if perhitungan_berondolan_tinggal_tph < 5: # < 5 butir
+        return 10
+    elif 5 < perhitungan_berondolan_tinggal_tph <= 7: # > 5 - 7 butir
+        return 8
+    elif 7 < perhitungan_berondolan_tinggal_tph <= 10: # > 7 - 10 butir
+        return 6
+    elif 10 < perhitungan_berondolan_tinggal_tph <= 12: # > 10 - 12 butir
+        return 4
+    elif perhitungan_berondolan_tinggal_tph > 12: # > 12 butir
+        return 2
+
+# %%
+def evaluate_rotasi_panen_bulanan(rotasi_panen):
+    perhitungan_rotasi_panen = 30/rotasi_panen
+    
+    if perhitungan_rotasi_panen > 3: # > 3 round
+        return 10
+    elif 2.7 < perhitungan_rotasi_panen <= 3: # 2,7 - < 3 round
+        return 8
+    elif 2.4 < perhitungan_rotasi_panen <= 2.7: # 2,4 - < 2,7 round
+        return 6
+    elif 2.1 < perhitungan_rotasi_panen <= 2.4: # 2,1 - < 2,4 round
+        return 4
+    elif perhitungan_rotasi_panen < 2.1: # < 2,1 round
+        return 2
+
+# %%
+# Immediately evaluate restan
+def evaluate_restan(restan):
+    
+    if restan < 4: # < 4 %
+        return 10
+    elif 4 < restan <= 6: # > 4 - 6 %
+        return 8
+    elif 6 < restan <= 8: # > 6 - 8 %
+        return 6
+    elif 8 < restan <= 10: # > 8 - 10 %
+        return 4
+    elif restan > 10: # > 10 %
+        return 2
+
+# %%
+# Immediately evaluate jaring
+def evaluate_jaring(jaring):
+    
+    if jaring > 100: # > 100%
+        return 10
+    elif 98 < jaring <= 100: # > 98% - 100%
+        return 8
+    elif 96 < jaring <= 98: # > 96% - 98%
+        return 6
+    elif 95 < jaring <= 96: # > 95% - 96%
+        return 4
+    elif jaring > 95: # < 95%
+        return 2
+
+# %%
+    # Immediately evaluate produktivitas pemanen
+    def evaluate_produktivitas_pemanen(produktivitas_pemanen):
+        
+        if produktivitas_pemanen > 750: # > 750 kg/HK
+            return 10
+        elif 700 < produktivitas_pemanen <= 750: # 700 - 750 kg/HK
+            return 8
+        elif 650 < produktivitas_pemanen <= 700: # 650 - 700 kg/HK
+            return 6
+        elif 600 < produktivitas_pemanen <= 650: # 600 - 650 kg/HK
+            return 4
+        elif produktivitas_pemanen < 600: # < 600 kg/HK
+            return 2
+
+# %%
+# Immediately evaluate administrasi panen
+def evaluate_administrasi_panen(administrasi_panen):
+    
+    if administrasi_panen == 0: # 0
+        return 10
+    elif 0 < administrasi_panen <= 1: # > 0 - 1
+        return 8
+    elif 1 < administrasi_panen <= 2: # > 1 - 2
+        return 6
+    elif 2 < administrasi_panen <= 3: # > 2 - 3
+        return 4
+    elif administrasi_panen > 3: # > 3
+        return 2
+
+# %%
+# Immediately evaluate kualitas tbs
+def evaluate_kualitas_tbs(kualitas_tbs):
+    
+    if kualitas_tbs > 98 : # > 98%
+        return 10
+    elif 97 < kualitas_tbs <= 98: # 97% - < 98%
+        return 8
+    elif 96 < kualitas_tbs <= 97: # 96% - < 97%
+        return 6
+    elif 95 < kualitas_tbs <= 96: # 95% - < 96%
+        return 4
+    elif kualitas_tbs < 95: # < 95%
+        return 2
+
+# %%
+# Immediately evaluate muatan overload
+def evaluate_muatan_overload(muatan_overload):
+    
+    if muatan_overload > 95 : # > 95%
+        return 10
+    elif 90 < muatan_overload <= 95: # 90 - < 95 %
+        return 8
+    elif 85 < muatan_overload <= 90: # 85 - < 90 %
+        return 6
+    elif 80 < muatan_overload <= 85: # 80 - < 85 %
+        return 4
+    elif muatan_overload < 80: # < 80 %
         return 2
 
 # %%
@@ -463,28 +612,88 @@ def analyse_qa_production(combobox_estate,
                           pokok_panen_float,
                           actual_float,
                           budget_float,
-                          janjang_panen_float,
-                          janjang_tertinggal_float,
+                          buah_panen_float,
+                          buah_tertinggal_float,
                           berondolan_tertinggal_float,
-                          janjang_tertinggal_mobil_float,
-                          berondolan_tertinggal_mobil_float,
+                          buah_tertinggal_tph_float,
+                          berondolan_tertinggal_tph_float,
                           rotasi_panen_float,
                           restan_float,
                           jaring_float,
                           produktivitas_pemanen_float,
                           administrasi_panen_float,
                           kualitas_tbs_float,
-                          muatan_overload_float,
-                          upload_note_float):
+                          muatan_overload_float):
     
-    # Actual vs Budget
-    # Selisih nya * persen rule
+    global combobox_chosen_year, chosen_year_weight
 
+    # Check chosen year if its empty
+    chosen_year = combobox_chosen_year.get()
+    if not chosen_year.strip():
+        messagebox.showerror("Error", "Tolong masukkan pilihan tahun.")
+        return
+
+    # Get the rule data based on the chosen menu 
+    try:
+        chosen_year_weight = extract_weights_by_year(YEARLY_WEIGHT_PRODUCTION, chosen_year)
+        print(chosen_year_weight)
+    except ValueError as e:
+        messagebox.showerror("Error", f"Gagal memuat kriteria untuk tahun {chosen_year}: {e}")
+        return
+    
+    # Evaluate each input for production
     score_actual_budget = evaluate_budget_actual(budget_float, actual_float)
 
-    score_buah_tinggal = evaluate_buah_tinggal(janjang_tertinggal_float)
+    score_buah_tinggal = evaluate_buah_tinggal(buah_tertinggal_float, pokok_sample_float)
 
-    return True
+    score_berondolan_tinggal = evaluate_berondolan_tinggal(berondolan_tertinggal_float, pokok_sample_float)
+
+    score_buah_tinggal_tph = evaluate_buah_tinggal_tph(buah_tertinggal_tph_float, pokok_sample_float)
+
+    score_berondolan_tinggal_tph = evaluate_berondolan_tinggal_tph(berondolan_tertinggal_tph_float, pokok_sample_float)
+
+    score_rotasi_perbulan = evaluate_rotasi_panen_bulanan(rotasi_panen_float)
+
+    score_restan = evaluate_restan(restan_float)
+
+    score_jaring = evaluate_jaring(jaring_float)
+
+    score_produktivitas_pemanen = evaluate_produktivitas_pemanen(produktivitas_pemanen_float)
+
+    score_administrasi_panen = evaluate_administrasi_panen(administrasi_panen_float)
+
+    score_kualitas_tbs = evaluate_kualitas_tbs(kualitas_tbs_float)
+
+    score_muatan_overload = evaluate_muatan_overload(muatan_overload_float)
+
+    # Store all the calculated scores in to dictionary 
+    scores = {
+        "Pencapaian Produksi": score_actual_budget,
+        "Kualitas Panen - TBS Tertinggal": score_buah_tinggal,
+        "Kualitas Panen - LF Tertinggal": score_berondolan_tinggal,
+        "Kualitas Transport - Jjg di TPH": score_buah_tinggal_tph,
+        "Kualitas Transport - LF di TPH": score_berondolan_tinggal_tph,
+        "Rotasi Panen": score_rotasi_perbulan,
+        "Restan": score_restan,
+        "Pemakaian Jaring/Terpal": score_jaring,
+        "Produktivitas Pemenen": score_produktivitas_pemanen,
+        "Administrasi Panen": score_administrasi_panen,
+        "Kualitas TBS": score_kualitas_tbs,
+        "Muatan Overload": score_muatan_overload,
+    }
+    
+    # Calculate the final score after yearly weight
+    final_scores = {}
+
+    for description, score_value in scores.items():
+        weight_percent = float(chosen_year_weight[description].replace("%", "")) / 100
+        weighted_score = score_value * weight_percent
+        final_scores[description] = {
+            "score": score_value,
+            "nilai": weighted_score
+        }
+
+    return final_scores
 
 # %% [markdown]
 #  ## 7. Core Logic - Fertilizer Rules & Validation
@@ -1019,7 +1228,7 @@ def create_main_widgets():
     label_chosen_year.grid(row=row_offset, column=0, padx=10, pady=10, sticky="ew")
     row_offset += 1
 
-    combobox_chosen_year = ttk.Combobox(root, values=YEARLY_WEIGHT, width=30, font=("Arial", 10))
+    combobox_chosen_year = ttk.Combobox(root, values=AVAILABLE_YEAR, width=30, font=("Arial", 10))
     combobox_chosen_year.grid(row=row_offset, column=0, padx=10, pady=5, sticky="ew")
     row_offset += 1
 
@@ -1474,8 +1683,8 @@ def show_add_rainfall_entry(selected_estate, date):
 # %%
 def submit_production_analysis(): 
     global username_var, combobox_estate, entry_divisi, entry_blok, entry_pokok_sample, entry_pokok_panen, entry_actual, entry_budget, \
-           entry_janjang_panen, entry_janjang_tertinggal, entry_berondolan_tertinggal, entry_janjang_tertinggal_mobil, \
-           entry_berondolan_tertinggal_mobil, entry_rotasi_panen, entry_restan, entry_jaring, entry_produktivitas_pemanen, \
+           entry_buah_panen, entry_buah_tertinggal, entry_berondolan_tertinggal, entry_buah_tertinggal_tph, \
+           entry_berondolan_tertinggal_tph, entry_rotasi_panen, entry_restan, entry_jaring, entry_produktivitas_pemanen, \
            entry_administrasi_panen, entry_kualitas_tbs, entry_muatan_overload, entry_upload_note
 
     if not root_exists: return
@@ -1489,11 +1698,11 @@ def submit_production_analysis():
     if not entry_pokok_panen.get(): messagebox.showerror("Error", "Tolong masukkan pokok panen."); return
     if not entry_actual.get(): messagebox.showerror("Error", "Tolong masukkan produksi actual."); return
     if not entry_budget.get(): messagebox.showerror("Error", "Tolong masukkan budget produksi."); return
-    if not entry_janjang_panen.get(): messagebox.showerror("Error", "Tolong masukkan jumlah janjang terpanen."); return
-    if not entry_janjang_tertinggal.get(): messagebox.showerror("Error", "Tolong masukkan jumlah janjang tertinggal."); return
+    if not entry_buah_panen.get(): messagebox.showerror("Error", "Tolong masukkan jumlah buah terpanen."); return
+    if not entry_buah_tertinggal.get(): messagebox.showerror("Error", "Tolong masukkan jumlah buah tertinggal."); return
     if not entry_berondolan_tertinggal.get(): messagebox.showerror("Error", "Tolong masukkan jumlah berondolan tertinggal."); return
-    if not entry_janjang_tertinggal_mobil.get(): messagebox.showerror("Error", "Tolong masukkan jumlah janjang tertinggal di mobil."); return
-    if not entry_berondolan_tertinggal_mobil.get(): messagebox.showerror("Error", "Tolong masukkan jumlah berondolan tertinggal di mobil."); return
+    if not entry_buah_tertinggal_tph.get(): messagebox.showerror("Error", "Tolong masukkan jumlah buah tertinggal di mobil."); return
+    if not entry_berondolan_tertinggal_tph.get(): messagebox.showerror("Error", "Tolong masukkan jumlah berondolan tertinggal di mobil."); return
     if not entry_rotasi_panen.get(): messagebox.showerror("Error", "Tolong masukkan rotasi panen."); return
     if not entry_restan.get(): messagebox.showerror("Error", "Tolong masukkan nilai restan."); return
     if not entry_jaring.get(): messagebox.showerror("Error", "Tolong masukkan jumlah jaring."); return
@@ -1533,13 +1742,13 @@ def submit_production_analysis():
         return
     
     try:
-        janjang_panen_float = float(entry_janjang_panen)
+        buah_panen_float = float(entry_buah_panen)
     except ValueError:
         messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
         return
     
     try:
-        janjang_tertinggal_float = float(entry_janjang_tertinggal)
+        buah_tertinggal_float = float(entry_buah_tertinggal)
     except ValueError:
         messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
         return
@@ -1551,13 +1760,13 @@ def submit_production_analysis():
         return
     
     try:
-        janjang_tertinggal_mobil_float = float(entry_janjang_tertinggal_mobil)
+        buah_tertinggal_tph_float = float(entry_buah_tertinggal_tph)
     except ValueError:
         messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
         return
     
     try:
-        berondolan_tertinggal_mobil_float = float(entry_berondolan_tertinggal_mobil)
+        berondolan_tertinggal_tph_float = float(entry_berondolan_tertinggal_tph)
     except ValueError:
         messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
         return
@@ -1610,26 +1819,25 @@ def submit_production_analysis():
         messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
         return
     
-    analyse_qa_production(combobox_estate.get(), 
+    final_qa_scores = analyse_qa_production(combobox_estate.get(), 
                           entry_divisi.get(),
                           entry_blok.get(),
                           pokok_sample_float,
                           pokok_panen_float,
                           actual_float,
                           budget_float,
-                          janjang_panen_float,
-                          janjang_tertinggal_float,
+                          buah_panen_float,
+                          buah_tertinggal_float,
                           berondolan_tertinggal_float,
-                          janjang_tertinggal_mobil_float,
-                          berondolan_tertinggal_mobil_float,
+                          buah_tertinggal_tph_float,
+                          berondolan_tertinggal_tph_float,
                           rotasi_panen_float,
                           restan_float,
                           jaring_float,
                           produktivitas_pemanen_float,
                           administrasi_panen_float,
                           kualitas_tbs_float,
-                          muatan_overload_float,
-                          upload_note_float)
+                          muatan_overload_float)
     
     # Display the results - Pass strings for display as they were entered/selected
     display_analysis_results(
@@ -1982,7 +2190,7 @@ def submit_estate(selected_estate):
 
 # %%
 def goto_chosen_menu():
-    global previous_menu, entry_username, combobox_menu_qa, combobox_chosen_year, df_input, df_output
+    global previous_menu, entry_username, combobox_menu_qa, combobox_chosen_year, df_input, df_output, df_output_weight, chosen_year_weight
 
     if not root_exists: return
 
@@ -2017,13 +2225,13 @@ def goto_chosen_menu():
 
     print("combobox_menu_qa", menu_qa)
 
-    # 5 Get the data based on the chosen menu 
+    # 5 Get the input and ouput data based on the chosen menu 
     try:
-        df_input, df_output = load_sheets_for_menu(menu_qa)
+        df_input, df_output, df_output_weight = load_sheets_for_menu(menu_qa)
     except Exception as e:
         messagebox.showerror("Error", f"Gagal memuat data untuk {menu_qa}: {e}")
         return
-
+    
     if menu_qa == "QA Produksi":
         qa_calculate_production()
     elif menu_qa == "QA Perawatan":
@@ -2132,12 +2340,12 @@ def generate_pdf_output():
 # %%
 def qa_calculate_production():
     global label_estate_option, label_divisi, label_blok, label_pokok_sample, label_pokok_panen, label_actual, label_budget, \
-           label_janjang_panen, label_janjang_tertinggal, label_berondolan_tertinggal, label_janjang_tertinggal_mobil, \
-           label_berondolan_tertinggal_mobil, label_rotasi_panen, label_restan, label_jaring, label_produktivitas_pemanen, \
+           label_buah_panen, label_buah_tertinggal, label_berondolan_tertinggal, label_buah_tertinggal_tph, \
+           label_berondolan_tertinggal_tph, label_rotasi_panen, label_restan, label_jaring, label_produktivitas_pemanen, \
            label_administrasi_panen, label_kualitas_tbs, label_muatan_overload, label_upload_note, \
            combobox_estate, entry_divisi, entry_blok, entry_pokok_sample, entry_pokok_panen, entry_actual, entry_budget, \
-           entry_janjang_panen, entry_janjang_tertinggal, entry_berondolan_tertinggal, entry_janjang_tertinggal_mobil, \
-           entry_berondolan_tertinggal_mobil, entry_rotasi_panen, entry_restan, entry_jaring, entry_produktivitas_pemanen, \
+           entry_buah_panen, entry_buah_tertinggal, entry_berondolan_tertinggal, entry_buah_tertinggal_tph, \
+           entry_berondolan_tertinggal_tph, entry_rotasi_panen, entry_restan, entry_jaring, entry_produktivitas_pemanen, \
            entry_administrasi_panen, entry_kualitas_tbs, entry_muatan_overload, entry_upload_note, \
            button_upload_photo, submit_calculation_production_button, back_button, current_menu
 
@@ -2218,20 +2426,20 @@ def qa_calculate_production():
     entry_budget.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
     row += 1
 
-    label_janjang_panen = tk.Label(scrollable_frame, text="Masukkan jumlah janjang panen:", font=("Arial", 12))
-    label_janjang_panen.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    label_buah_panen = tk.Label(scrollable_frame, text="Masukkan jumlah buah panen:", font=("Arial", 12))
+    label_buah_panen.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
     row += 1
 
-    entry_janjang_panen = tk.Entry(scrollable_frame, font=("Arial", 10))
-    entry_janjang_panen.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    entry_buah_panen = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_buah_panen.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
     row += 1
 
-    label_janjang_tertinggal = tk.Label(scrollable_frame, text="Masukkan jumlah janjang tertinggal (di pokok/piringan/path/gawangan (masak, overripe, busuk)):", font=("Arial", 12))
-    label_janjang_tertinggal.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    label_buah_tertinggal = tk.Label(scrollable_frame, text="Masukkan jumlah buah tertinggal (di pokok/piringan/path/gawangan (masak, overripe, busuk)):", font=("Arial", 12))
+    label_buah_tertinggal.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
     row += 1
 
-    entry_janjang_tertinggal = tk.Entry(scrollable_frame, font=("Arial", 10))
-    entry_janjang_tertinggal.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    entry_buah_tertinggal = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_buah_tertinggal.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
     row += 1
 
     label_berondolan_tertinggal = tk.Label(scrollable_frame, text="Masukkan jumlah berondolan tertinggal/tersangkut (di pelepah, piringan, path, gawangan):", font=("Arial", 12))
@@ -2242,20 +2450,20 @@ def qa_calculate_production():
     entry_berondolan_tertinggal.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
     row += 1
 
-    label_janjang_tertinggal_mobil = tk.Label(scrollable_frame, text="Masukkan jumlah janjang tertinggal di TPH atau tercecer di CR & MR:", font=("Arial", 12))
-    label_janjang_tertinggal_mobil.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    label_buah_tertinggal_tph = tk.Label(scrollable_frame, text="Masukkan jumlah buah tertinggal di TPH atau tercecer di CR & MR:", font=("Arial", 12))
+    label_buah_tertinggal_tph.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
     row += 1
 
-    entry_janjang_tertinggal_mobil = tk.Entry(scrollable_frame, font=("Arial", 10))
-    entry_janjang_tertinggal_mobil.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    entry_buah_tertinggal_tph = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_buah_tertinggal_tph.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
     row += 1
 
-    label_berondolan_tertinggal_mobil = tk.Label(scrollable_frame, text="Masukkan jumlah berondolan tertinggal di TPH atau tercecer di CR & MR:", font=("Arial", 12))
-    label_berondolan_tertinggal_mobil.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    label_berondolan_tertinggal_tph = tk.Label(scrollable_frame, text="Masukkan jumlah berondolan tertinggal di TPH atau tercecer di CR & MR:", font=("Arial", 12))
+    label_berondolan_tertinggal_tph.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
     row += 1
 
-    entry_berondolan_tertinggal_mobil = tk.Entry(scrollable_frame, font=("Arial", 10))
-    entry_berondolan_tertinggal_mobil.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    entry_berondolan_tertinggal_tph = tk.Entry(scrollable_frame, font=("Arial", 10))
+    entry_berondolan_tertinggal_tph.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
     row += 1
 
     label_rotasi_panen = tk.Label(scrollable_frame, text="Masukkan jumlah rotasi panen perbulan:", font=("Arial", 12))
@@ -2444,7 +2652,8 @@ def main_process():
     # Define all globals used within this function and others it calls
     global root, previous_menu, root_exists, current_menu, \
            df, input_sheets, output_sheets, df_input_sheets, df_output_sheets, \
-           df_input, df_output, \
+           df_input, df_output, df_output_weight, \
+           chosen_year_weight, \
            photo_image, \
            username_var, username, \
            input_production, input_nursery, input_chemist, input_fertilizer, \
@@ -2459,12 +2668,12 @@ def main_process():
            label_daily_rainfall, entry_daily_rainfall, submit_add_rainfall_button, \
            label_update_rainfall, entry_update_rainfall, submit_update_rainfall_button, \
            entry_blok, entry_divisi, entry_tanggal_rencana_pupuk, entry_pokok_sample, entry_pokok_panen, entry_actual, entry_budget, \
-           entry_janjang_panen, entry_janjang_tertinggal, entry_berondolan_tertinggal, entry_janjang_tertinggal_mobil, \
-           entry_berondolan_tertinggal_mobil, entry_rotasi_panen, entry_restan, entry_jaring, entry_produktivitas_pemanen, \
+           entry_buah_panen, entry_buah_tertinggal, entry_berondolan_tertinggal, entry_buah_tertinggal_tph, \
+           entry_berondolan_tertinggal_tph, entry_rotasi_panen, entry_restan, entry_jaring, entry_produktivitas_pemanen, \
            entry_administrasi_panen, entry_kualitas_tbs, entry_muatan_overload, label_upload_note, \
            label_blok, label_divisi,  label_tanggal_rencana_pupuk, label_pokok_sample, label_pokok_panen, label_actual, label_budget, \
-           label_janjang_panen, label_janjang_tertinggal, label_berondolan_tertinggal, label_janjang_tertinggal_mobil, \
-           label_berondolan_tertinggal_mobil, label_rotasi_panen, label_restan, label_jaring, label_produktivitas_pemanen, \
+           label_buah_panen, label_buah_tertinggal, label_berondolan_tertinggal, label_buah_tertinggal_tph, \
+           label_berondolan_tertinggal_tph, label_rotasi_panen, label_restan, label_jaring, label_produktivitas_pemanen, \
            label_administrasi_panen, label_kualitas_tbs, label_muatan_overload, entry_upload_note, \
            uploaded_photo_path, \
            button_upload_photo, submit_calculation_production_button, \
@@ -2497,6 +2706,8 @@ def main_process():
     df_output_sheets = None
     df_input = None 
     df_output = None
+    df_output_weight = None
+    chosen_year_weight = None
 
     # --- Initialize Widget References (Good Practice) ---
     # (Keep the list of widget=None assignments here)
@@ -2527,16 +2738,16 @@ def main_process():
     entry_actual = None
     label_budget = None
     entry_budget = None
-    label_janjang_panen = None
-    entry_janjang_panen = None
-    label_janjang_tertinggal = None
-    entry_janjang_tertinggal = None
+    label_buah_panen = None
+    entry_buah_panen = None
+    label_buah_tertinggal = None
+    entry_buah_tertinggal = None
     label_berondolan_tertinggal = None
     entry_berondolan_tertinggal = None
-    label_janjang_tertinggal_mobil = None
-    entry_janjang_tertinggal_mobil = None
-    label_berondolan_tertinggal_mobil = None
-    entry_berondolan_tertinggal_mobil = None
+    label_buah_tertinggal_tph = None
+    entry_buah_tertinggal_tph = None
+    label_berondolan_tertinggal_tph = None
+    entry_berondolan_tertinggal_tph = None
     label_rotasi_panen = None
     entry_rotasi_panen = None
     label_restan = None
