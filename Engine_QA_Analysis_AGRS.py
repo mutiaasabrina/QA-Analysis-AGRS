@@ -28,6 +28,7 @@ from pydrive2.drive import GoogleDrive
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
+from reportlab.lib import colors
 
 # GUI Libraries
 import tkinter as tk
@@ -1791,7 +1792,7 @@ def submit_production_analysis():
     }
     
     # Analyze the input values 
-    final_qa_nilai, final_qa_nilai = analyse_qa_production(
+    final_qa_score, final_qa_nilai = analyse_qa_production(
                         current_date,
                         combobox_estate.get(), 
                         entry_divisi.get(),
@@ -1813,11 +1814,11 @@ def submit_production_analysis():
     
     # Save all the input and procesed datas into the spreadsheets
     save_to_sheet(input_production, "Input - Production", input_data)
-    save_to_sheet(output_production, "Output - Production", final_qa_nilai)
+    save_to_sheet(output_production, "Output - Production", final_qa_score)
     save_to_sheet(output_weight_production, "Output (Weight) - Production", final_qa_nilai)
 
     # Compose PDF report
-    generate_pdf_output(current_date, final_qa_nilai, final_qa_nilai)
+    generate_pdf_output(final_qa_score, final_qa_nilai)
 
     # Display success window and go back to main menu
     show_success_window()
@@ -2284,113 +2285,124 @@ def choose_and_upload_file():
     upload_photo_to_drive(file_path, note_text)
 
 # %%
-def generate_pdf_output(current_date, final_qa_scores, final_qa_nilai):
+def generate_pdf_output(final_qa_scores, final_qa_nilai):
     global uploaded_photo_path
 
     pdf_path = f"hasil_analisa_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     c = canvas.Canvas(pdf_path, pagesize=A4)
     width, height = A4
+    margin = 50
 
-    # --- Sample Text Data (You can replace these with actual values) ---
-    c.setFont("Helvetica", 12)
+    # --- Title ---
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(margin, height - 50, "Hasil Analisa QA Produksi")
 
-    height -= 20
-    c.drawString(50, height, f"Tanggal: {current_date}")
+    # --- Metadata Section ---
+    c.setFont("Helvetica", 11)
+    meta_y = height - 80
+    left_x = margin
+    right_x = margin + 250
 
-    height -= 20
-    c.drawString(50, height, "Hasil Analisa QA Produksi - Score")
+    c.drawString(left_x, meta_y, f"Blok         : {final_qa_scores.get('Blok', '')}")
+    c.drawString(right_x, meta_y, f"Divisi  : {final_qa_scores.get('Divisi', '')}")
+    meta_y -= 15
+    c.drawString(left_x, meta_y, f"Panen Rotasi : {final_qa_scores.get('Panen Rotasi', '')}")
+    c.drawString(right_x, meta_y, f"Estate  : {final_qa_scores.get('Estate', '')}")
+    meta_y -= 15
+    c.drawString(left_x, meta_y, f"Tgl Periksa  : {final_qa_scores.get('Tanggal Periksa', '')}")
 
-    height -= 20
-    c.drawString(50, height, f"Pencapaian Produksi: {final_qa_scores["Pencapaian Produksi"]}")
+    # --- Table Header ---
+    meta_y -= 30
+    y = meta_y
+    col1_x = margin
+    col2_x = margin + 270
+    col3_x = margin + 370
 
-    height -= 20
-    c.drawString(50, height, f"Kualitas Panen - TBS Tertinggal: {final_qa_scores["Kualitas Panen - TBS Tertinggal"]}")
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(col1_x, y, "Deskripsi Penilaian")
+    c.drawString(col2_x, y, "Score")
+    c.drawString(col3_x, y, "Nilai")
+    c.line(col1_x, y - 2, col3_x + 50, y - 2)
 
-    height -= 20
-    c.drawString(50, height, f"Kualitas Panen - LF Tertinggal: {final_qa_scores["Kualitas Panen - LF Tertinggal"]}")
+    # --- Table Content ---
+    y -= 20
+    c.setFont("Helvetica", 10)
+    for key in final_qa_scores:
+        if key in ["Blok", "Panen Rotasi", "Tanggal Periksa", "Divisi", "Estate", "Total"]:
+            continue
 
-    height -= 20
-    c.drawString(50, height, f"Kualitas Transport - Jjg di TPH: {final_qa_scores["Kualitas Transport - Jjg di TPH"]}")
+        score = final_qa_scores.get(key, "")
+        nilai = final_qa_nilai.get(key, "")
 
-    height -= 20
-    c.drawString(50, height, f"Kualitas Transport - LF di TPH: {final_qa_scores["Kualitas Transport - LF di TPH"]}")
+        # --- Draw Description (black) ---
+        c.setFillColor(colors.black)
+        c.drawString(col1_x, y, str(key))
 
-    height -= 20
-    c.drawString(50, height, f"Rotasi Panen: {final_qa_scores["Rotasi Panen"]}")
+        # --- Determine score color ---
+        try:
+            score_val = float(score)
+        except:
+            score_val = None
 
-    height -= 20
-    c.drawString(50, height, f"Restan: {final_qa_scores["Restan"]}")
+        score_bg_color = colors.white
+        if score_val == 10:
+            score_bg_color = colors.green
+        elif score_val == 8:
+            score_bg_color = colors.blue
+        elif score_val == 6:
+            score_bg_color = colors.orange
+        elif score_val == 4:
+            score_bg_color = colors.yellow
+        elif score_val <= 2:
+            score_bg_color = colors.red
 
-    height -= 20
-    c.drawString(50, height, f"Pemakaian Jaring/Terpal: {final_qa_scores["Pemakaian Jaring/Terpal"]}")
+        # --- Draw colored rectangle for score ---
+        rect_x = col2_x - 2
+        rect_y = y - 2
+        rect_width = 40
+        rect_height = 12
+        c.setFillColor(score_bg_color)
+        c.rect(rect_x, rect_y, rect_width, rect_height, fill=1, stroke=0)
 
-    height -= 20
-    c.drawString(50, height, f"Produktivitas Pemanen: {final_qa_scores["Produktivitas Pemanen"]}")
+        # --- Draw score text over it (white or black depending on bg) ---
+        if score_bg_color in [colors.green, colors.blue, colors.red]:
+            text_color = colors.white
+        else:
+            text_color = colors.black
 
-    height -= 20
-    c.drawString(50, height, f"Administrasi Panen: {final_qa_scores["Administrasi Panen"]}")
+        c.setFillColor(text_color)
+        c.drawString(col2_x, y, str(score))
 
-    height -= 20
-    c.drawString(50, height, f"Kualitas TBS: {final_qa_scores["Kualitas TBS"]}")
+        # --- Draw nilai normally (black) ---
+        c.setFillColor(colors.black)
+        c.drawString(col3_x, y, str(round(nilai, 2)) if isinstance(nilai, (float, int)) else str(nilai))
 
-    height -= 20
-    c.drawString(50, height, f"Muatan Overload: {final_qa_scores["Muatan Overload"]}")
+        y -= 15
+        if y < 100:
+            c.showPage()
+            y = height - 50
 
-    # Nilai
-    height -= 20
-    c.drawString(50, height, "Hasil Analisa QA Produksi - Nilai")
+    # --- Total Row ---
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(col1_x, y, "Total")
+    c.drawString(col2_x, y, str(final_qa_scores.get("Total", "")))
+    c.drawString(col3_x, y, str(round(final_qa_nilai.get("Total", 0), 2)))
+    y -= 20
 
-    height -= 20
-    c.drawString(50, height, f"Pencapaian Produksi: {final_qa_nilai["Pencapaian Produksi"]}")
-
-    height -= 20
-    c.drawString(50, height, f"Kualitas Panen - TBS Tertinggal: {final_qa_nilai["Kualitas Panen - TBS Tertinggal"]}")
-
-    height -= 20
-    c.drawString(50, height, f"Kualitas Panen - LF Tertinggal: {final_qa_nilai["Kualitas Panen - LF Tertinggal"]}")
-
-    height -= 20
-    c.drawString(50, height, f"Kualitas Transport - Jjg di TPH: {final_qa_nilai["Kualitas Transport - Jjg di TPH"]}")
-
-    height -= 20
-    c.drawString(50, height, f"Kualitas Transport - LF di TPH: {final_qa_nilai["Kualitas Transport - LF di TPH"]}")
-
-    height -= 20
-    c.drawString(50, height, f"Rotasi Panen: {final_qa_nilai["Rotasi Panen"]}")
-
-    height -= 20
-    c.drawString(50, height, f"Restan: {final_qa_nilai["Restan"]}")
-
-    height -= 20
-    c.drawString(50, height, f"Pemakaian Jaring/Terpal: {final_qa_nilai["Pemakaian Jaring/Terpal"]}")
-
-    height -= 20
-    c.drawString(50, height, f"Produktivitas Pemanen: {final_qa_nilai["Produktivitas Pemanen"]}")
-
-    height -= 20
-    c.drawString(50, height, f"Administrasi Panen: {final_qa_nilai["Administrasi Panen"]}")
-
-    height -= 20
-    c.drawString(50, height, f"Kualitas TBS: {final_qa_nilai["Kualitas TBS"]}")
-
-    height -= 20
-    c.drawString(50, height, f"Muatan Overload: {final_qa_nilai["Muatan Overload"]}")
-
-    # --- Insert the image if available ---
+    # --- Optional Image ---
     if uploaded_photo_path and os.path.exists(uploaded_photo_path):
         try:
             img = ImageReader(uploaded_photo_path)
-            c.drawImage(img, 50, height - 400, width=200, preserveAspectRatio=True, mask='auto')
+            c.drawImage(img, margin, y - 200, width=200, preserveAspectRatio=True, mask='auto')
         except Exception as e:
-            print(f"Error loading image in PDF: {e}")
-            c.drawString(50, height - 140, "Gagal memuat foto untuk PDF.")
+            c.drawString(margin, y - 20, f"Gagal memuat foto: {e}")
 
-    # --- Finalize PDF ---
+    # --- Finalize ---
     c.showPage()
     c.save()
-
     messagebox.showinfo("Berhasil", f"PDF berhasil dibuat:\n{pdf_path}")
-    os.startfile(pdf_path)  # Optional: Open PDF automatically (Windows only)
+    os.startfile(pdf_path)
+
 
 # %%
 def qa_calculate_production():
