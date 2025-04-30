@@ -69,7 +69,7 @@ MAPPING_SCORE_TO_DESC = {
     "score_rotasi_perbulan": "Rotasi Panen",
     "score_restan": "Restan",
     "score_jaring": "Pemakaian Jaring/Terpal",
-    "score_produktivitas_pemanen": "Produktivitas Pemenen",
+    "score_produktivitas_pemanen": "Produktivitas Pemanen",
     "score_administrasi_panen": "Administrasi Panen",
     "score_kualitas_tbs": "Kualitas TBS",
     "score_muatan_overload": "Muatan Overload"
@@ -86,7 +86,7 @@ YEARLY_WEIGHT_PRODUCTION = {
     "Rotasi Panen": {"2025": "15%", "2026": "13%", "2027": "12%"},
     "Restan": {"2025": "10%", "2026": "10%", "2027": "10%"},
     "Pemakaian Jaring/Terpal": {"2025": "5%", "2026": "5%", "2027": "5%"},
-    "Produktivitas Pemenen": {"2025": "0%", "2026": "7%", "2027": "4%"},
+    "Produktivitas Pemanen": {"2025": "0%", "2026": "7%", "2027": "4%"},
     "Administrasi Panen": {"2025": "0%", "2026": "5%", "2027": "5%"},
     "Kualitas TBS": {"2025": "0%", "2026": "0%", "2027": "12%"},
     "Muatan Overload": {"2025": "0%", "2026": "0%", "2027": "5%"},
@@ -240,6 +240,16 @@ def extract_weights_by_year(weights_dict, year):
 
     return extracted
 
+# %%
+def save_to_sheet(worksheet, sheet_name, data_dict):
+    try:
+        header = worksheet.row_values(1)  # header from sheet
+        values = [data_dict.get(col, "") for col in header]
+        worksheet.append_row(values)
+        print(f"Sukses menyimpan ke '{sheet_name}' (header matched)")
+    except Exception as e:
+        print(f"Gagal menyimpan ke '{sheet_name}': {e}")
+
 # %% [markdown]
 #  ## 4. Global Variables (Application State)
 
@@ -266,6 +276,10 @@ output_production = None
 output_nursery = None
 output_chemist = None
 output_fertilizer = None
+output_weight_production = None
+output_weight_nursery = None
+output_weight_chemist = None
+output_weight_fertilizer = None
 
 # --- GUI State ---
 success_window = None
@@ -439,19 +453,19 @@ def evaluate_budget_actual(budget, actual):
         return 2
 
 # %%
-    def evaluate_buah_tinggal(buah_tinggal, pokok_sample):
-        perhitungan_buah_tinggal = (buah_tinggal / pokok_sample) * 100  # percentage
+def evaluate_buah_tinggal(buah_tinggal, pokok_sample):
+    perhitungan_buah_tinggal = (buah_tinggal / pokok_sample) * 100  # percentage
 
-        if perhitungan_buah_tinggal == 0:  # 0%
-            return 10
-        elif 0 < perhitungan_buah_tinggal <= 0.2:  # > 0% - 0.2%
-            return 8
-        elif 0.2 < perhitungan_buah_tinggal <= 0.4:  # > 0.2% - 0.4%
-            return 6
-        elif 0.4 < perhitungan_buah_tinggal <= 0.6:  # > 0.4% - 0.6%
-            return 4
-        elif perhitungan_buah_tinggal > 0.6:  # > 0.6%
-            return 2
+    if perhitungan_buah_tinggal == 0:  # 0%
+        return 10
+    elif 0 < perhitungan_buah_tinggal <= 0.2:  # > 0% - 0.2%
+        return 8
+    elif 0.2 < perhitungan_buah_tinggal <= 0.4:  # > 0.2% - 0.4%
+        return 6
+    elif 0.4 < perhitungan_buah_tinggal <= 0.6:  # > 0.4% - 0.6%
+        return 4
+    elif perhitungan_buah_tinggal > 0.6:  # > 0.6%
+        return 2
 
 # %%
 def evaluate_berondolan_tinggal(berondolan_tinggal, pokok_sample):
@@ -545,19 +559,19 @@ def evaluate_jaring(jaring):
         return 2
 
 # %%
-    # Immediately evaluate produktivitas pemanen
-    def evaluate_produktivitas_pemanen(produktivitas_pemanen):
-        
-        if produktivitas_pemanen > 750: # > 750 kg/HK
-            return 10
-        elif 700 < produktivitas_pemanen <= 750: # 700 - 750 kg/HK
-            return 8
-        elif 650 < produktivitas_pemanen <= 700: # 650 - 700 kg/HK
-            return 6
-        elif 600 < produktivitas_pemanen <= 650: # 600 - 650 kg/HK
-            return 4
-        elif produktivitas_pemanen < 600: # < 600 kg/HK
-            return 2
+# Immediately evaluate produktivitas pemanen
+def evaluate_produktivitas_pemanen(produktivitas_pemanen):
+    
+    if produktivitas_pemanen > 750: # > 750 kg/HK
+        return 10
+    elif 700 < produktivitas_pemanen <= 750: # 700 - 750 kg/HK
+        return 8
+    elif 650 < produktivitas_pemanen <= 700: # 650 - 700 kg/HK
+        return 6
+    elif 600 < produktivitas_pemanen <= 650: # 600 - 650 kg/HK
+        return 4
+    elif produktivitas_pemanen < 600: # < 600 kg/HK
+        return 2
 
 # %%
 # Immediately evaluate administrasi panen
@@ -605,27 +619,33 @@ def evaluate_muatan_overload(muatan_overload):
         return 2
 
 # %%
-def analyse_qa_production(combobox_estate, 
-                          entry_divisi,
-                          entry_blok,
-                          pokok_sample_float,
-                          pokok_panen_float,
-                          actual_float,
-                          budget_float,
-                          buah_panen_float,
-                          buah_tertinggal_float,
-                          berondolan_tertinggal_float,
-                          buah_tertinggal_tph_float,
-                          berondolan_tertinggal_tph_float,
-                          rotasi_panen_float,
-                          restan_float,
-                          jaring_float,
-                          produktivitas_pemanen_float,
-                          administrasi_panen_float,
-                          kualitas_tbs_float,
-                          muatan_overload_float):
+def analyse_qa_production(
+        current_date,
+        combobox_estate, 
+        entry_divisi,
+        entry_blok,
+        pokok_sample_float,
+        actual_float,
+        budget_float,
+        buah_tertinggal_float,
+        berondolan_tertinggal_float,
+        buah_tertinggal_tph_float,
+        berondolan_tertinggal_tph_float,
+        rotasi_panen_float,
+        restan_float,
+        jaring_float,
+        produktivitas_pemanen_float,
+        administrasi_panen_float,
+        kualitas_tbs_float,
+        muatan_overload_float):
     
     global combobox_chosen_year, chosen_year_weight
+
+    print("current_date", current_date)
+    print("current_date", type(current_date))
+    print("combobox_estate", combobox_estate)
+    print("entry_divisi", entry_divisi)
+    print("entry_blok", entry_blok)
 
     # Check chosen year if its empty
     chosen_year = combobox_chosen_year.get()
@@ -676,24 +696,40 @@ def analyse_qa_production(combobox_estate,
         "Rotasi Panen": score_rotasi_perbulan,
         "Restan": score_restan,
         "Pemakaian Jaring/Terpal": score_jaring,
-        "Produktivitas Pemenen": score_produktivitas_pemanen,
+        "Produktivitas Pemanen": score_produktivitas_pemanen,
         "Administrasi Panen": score_administrasi_panen,
         "Kualitas TBS": score_kualitas_tbs,
         "Muatan Overload": score_muatan_overload,
     }
     
     # Calculate the final score after yearly weight
-    final_scores = {}
+    score_only_data = {}
+    nilai_only_data = {}
 
     for description, score_value in scores.items():
-        weight_percent = float(chosen_year_weight[description].replace("%", "")) / 100
-        weighted_score = score_value * weight_percent
-        final_scores[description] = {
-            "score": score_value,
-            "nilai": weighted_score
-        }
+        score_only_data[description] = score_value
+        if description in chosen_year_weight:
+            weight_percent = float(chosen_year_weight[description].replace("%", "")) / 100
+            nilai_only_data[description] = score_value * weight_percent
 
-    return final_scores
+    # Total
+    total_score = sum(score_only_data.values())
+    total_nilai = sum(nilai_only_data.values())
+
+    # Identifier info
+    identifier_data = {
+        "Blok": entry_blok,
+        "Panen Rotasi": rotasi_panen_float,
+        "Tanggal Periksa": current_date,
+        "Divisi": entry_divisi,
+        "Estate": combobox_estate,
+    }
+
+    # Merge final dict
+    score_data = {**identifier_data, **score_only_data, "Total": total_score}
+    nilai_data = {**identifier_data, **nilai_only_data, "Total": total_nilai}
+
+    return score_data, nilai_data
 
 # %% [markdown]
 #  ## 7. Core Logic - Fertilizer Rules & Validation
@@ -1461,94 +1497,6 @@ def show_ESTATE_OPTIONS():
 
 
 # %%
-def show_estate_options_for_analysis():
-    global label_estate_option, combobox_estate, submit_estate_button, back_button, current_menu, \
-           entry_blok, entry_tanggal_rencana_pupuk, entry_peilscale, entry_tanggal_pupuk_terakhir, \
-           combobox_jenis_pupuk_terakhir, combobox_rencana_jenis_pupuk, label_blok, label_tanggal_rencana_pupuk, \
-           label_peilscale, label_tanggal_pupuk_terakhir, label_jenis_pupuk_terakhir, label_rencana_jenis_pupuk, \
-           button_tanggal_rencana_pupuk, button_tanggal_pupuk_terakhir
-
-    if not root_exists:
-        return
-
-    # --- ROW & COLUMN CONFIGURATION RESET ---
-    for i in range(20): # Reset rows
-        root.rowconfigure(i, weight=0)
-    root.columnconfigure(0, weight=1) # Configure columns needed by THIS screen
-    root.columnconfigure(1, weight=0) # Reset unused columns
-    # --- END CONFIGURATION ---
-
-    hide_all_widgets()
-    current_menu = "estate_analysis"
-
-    # --- Use sticky="ew" on ALL widgets ---
-    label_estate_option = tk.Label(root, text="Pilih estate (Inti/Plasma):", font=("Arial", 12))
-    label_estate_option.grid(row=0, column=0, padx=10, pady=5, sticky="ew")
-
-    ESTATE_OPTIONS = ["Inti", "Plasma"]
-    combobox_estate = ttk.Combobox(root, values=ESTATE_OPTIONS, width=30, font=("Arial", 10))
-    combobox_estate.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
-
-    label_blok = tk.Label(root, text="Masukkan Nama Blok:", font=("Arial", 12))
-    label_blok.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
-
-    entry_blok = tk.Entry(root, font=("Arial", 10))
-    entry_blok.grid(row=3, column=0, padx=10, pady=5, sticky="ew")
-
-    label_tanggal_rencana_pupuk = tk.Label(root, text="Masukkan tanggal rencana pupuk:", font=("Arial", 12))
-    label_tanggal_rencana_pupuk.grid(row=4, column=0, padx=10, pady=5, sticky="ew")
-
-    entry_tanggal_rencana_pupuk = tk.Entry(root, font=("Arial", 10))
-    entry_tanggal_rencana_pupuk.grid(row=5, column=0, padx=10, pady=5, sticky="ew")
-
-    button_tanggal_rencana_pupuk = tk.Button(root, text="Select Date", command=lambda: get_date(entry_tanggal_rencana_pupuk), font=("Arial", 10), bg=SECONDARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR) #Added button and color
-    button_tanggal_rencana_pupuk.grid(row=5, column=1, padx=5, pady=5) # Place button next to entry
-
-    label_tanggal_pupuk_terakhir = tk.Label(root, text="Masukkan tanggal pupuk terakhir:", font=("Arial", 12))
-    label_tanggal_pupuk_terakhir.grid(row=8, column=0, padx=10, pady=5, sticky="ew")
-
-    entry_tanggal_pupuk_terakhir = tk.Entry(root, font=("Arial", 10))
-    entry_tanggal_pupuk_terakhir.grid(row=9, column=0, padx=10, pady=5, sticky="ew")
-
-    button_tanggal_pupuk_terakhir = tk.Button(root, text="Select Date", command=lambda: get_date(entry_tanggal_pupuk_terakhir), font=("Arial", 10), bg=SECONDARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR) #Added button and color
-    button_tanggal_pupuk_terakhir.grid(row=9, column=1, padx=5, pady=5) # Place button next to entry
-
-    label_peilscale = tk.Label(root, text="Masukkan nilai Peilscale:", font=("Arial", 12))
-    label_peilscale.grid(row=6, column=0, padx=10, pady=5, sticky="ew")
-
-    entry_peilscale = tk.Entry(root, font=("Arial", 10))
-    entry_peilscale.grid(row=7, column=0, padx=10, pady=5, sticky="ew")
-
-    label_jenis_pupuk_terakhir = tk.Label(root, text="Masukkan jenis pupuk terakhir:", font=("Arial", 12))
-    label_jenis_pupuk_terakhir.grid(row=10, column=0, padx=10, pady=5, sticky="ew")
-
-    combobox_jenis_pupuk_terakhir = ttk.Combobox(root, values=FERTILIZER_TYPE, width=30, font=("Arial", 10))
-    combobox_jenis_pupuk_terakhir.grid(row=11, column=0, padx=10, pady=5, sticky="ew")
-
-    label_rencana_jenis_pupuk = tk.Label(root, text="Masukkan rencana jenis pupuk:", font=("Arial", 12))
-    label_rencana_jenis_pupuk.grid(row=12, column=0, padx=10, pady=5, sticky="ew")
-
-    combobox_rencana_jenis_pupuk = ttk.Combobox(root, values=FERTILIZER_TYPE, width=30, font=("Arial", 10))
-    combobox_rencana_jenis_pupuk.grid(row=13, column=0, padx=10, pady=5, sticky="ew")
-
-    submit_estate_button = tk.Button(root, text="Submit", command=lambda: submit_analysis(
-        combobox_estate.get(),
-        entry_blok.get(),
-        entry_peilscale.get(),
-        combobox_jenis_pupuk_terakhir.get(),
-        entry_tanggal_pupuk_terakhir.get(),
-        combobox_rencana_jenis_pupuk.get(),
-        entry_tanggal_rencana_pupuk.get()
-    ), font=("Arial", 10), bg=PRIMARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR) # Set color
-    submit_estate_button.grid(row=14, column=0, padx=10, pady=10)
-
-    back_button = tk.Button(root, text="Back", command=go_back, font=("Arial", 10), bg=SECONDARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR) # Set color
-    back_button.grid(row=15, column=0, padx=10, pady=10)
-
-    root.columnconfigure(0, weight=1)
-
-
-# %%
 def show_ESTATE_OPTIONS_for_add_rainfall():
     global label_estate_option, combobox_estate, submit_estate_check_button, back_button, current_menu, previous_menu
 
@@ -1694,6 +1642,7 @@ def submit_production_analysis():
     if combobox_estate.get() not in ESTATE_OPTIONS: messagebox.showerror("Error", f"Nama estate invalid: '{combobox_estate.get()}'."); return
     if not entry_divisi.get(): messagebox.showerror("Error", "Tolong masukkan nama divisi."); return
     if not entry_blok.get(): messagebox.showerror("Error", "Tolong masukkan nama blok."); return
+    if not entry_pokok_panen.get(): messagebox.showerror("Error", "Tolong masukkan panen rotasi."); return
     if not entry_pokok_sample.get(): messagebox.showerror("Error", "Tolong masukkan pokok sample."); return
     if not entry_pokok_panen.get(): messagebox.showerror("Error", "Tolong masukkan pokok panen."); return
     if not entry_actual.get(): messagebox.showerror("Error", "Tolong masukkan produksi actual."); return
@@ -1710,7 +1659,7 @@ def submit_production_analysis():
     if not entry_administrasi_panen.get(): messagebox.showerror("Error", "Tolong masukkan nilai administrasi panen."); return
     if not entry_kualitas_tbs.get(): messagebox.showerror("Error", "Tolong masukkan nilai kualitas TBS."); return
     if not entry_muatan_overload.get(): messagebox.showerror("Error", "Tolong masukkan jumlah muatan overload."); return
-    if not entry_upload_note.get(): messagebox.showerror("Error", "Tolong masukkan rencana jenis pupuk."); return
+    if not entry_upload_note.get(): messagebox.showerror("Error", "Tolong masukkan note foto."); return
 
     username = username_var.get()
     if not username.strip():
@@ -1718,133 +1667,154 @@ def submit_production_analysis():
         return
     
     try:
-        pokok_sample_float = float(entry_pokok_sample)
+        pokok_sample_float = float(entry_pokok_sample.get())
     except ValueError:
         messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
         return
     
     try:
-        pokok_panen_float = float(entry_pokok_panen)
+        pokok_panen_float = float(entry_pokok_panen.get())
     except ValueError:
         messagebox.showerror("Error", "Nilai pokok panen harus berupa angka.")
         return
     
     try:
-        actual_float = float(entry_actual)
+        actual_float = float(entry_actual.get())
     except ValueError:
-        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        messagebox.showerror("Error", "Nilai produksi actual harus berupa angka.")
         return
     
     try:
-        budget_float = float(entry_budget)
+        budget_float = float(entry_budget.get())
     except ValueError:
-        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        messagebox.showerror("Error", "Nilai budget produksi harus berupa angka.")
         return
     
     try:
-        buah_panen_float = float(entry_buah_panen)
+        buah_panen_float = float(entry_buah_panen.get())
     except ValueError:
-        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        messagebox.showerror("Error", "Nilai jumlah buah terpanen harus berupa angka.")
         return
     
     try:
-        buah_tertinggal_float = float(entry_buah_tertinggal)
+        buah_tertinggal_float = float(entry_buah_tertinggal.get())
     except ValueError:
-        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        messagebox.showerror("Error", "Nilai jumlah buah tertinggal harus berupa angka.")
         return
     
     try:
-        berondolan_tertinggal_float = float(entry_berondolan_tertinggal)
+        berondolan_tertinggal_float = float(entry_berondolan_tertinggal.get())
     except ValueError:
-        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        messagebox.showerror("Error", "Nilai jumlah berondolan tertinggal harus berupa angka.")
         return
     
     try:
-        buah_tertinggal_tph_float = float(entry_buah_tertinggal_tph)
+        buah_tertinggal_tph_float = float(entry_buah_tertinggal_tph.get())
     except ValueError:
-        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        messagebox.showerror("Error", "Nilai jumlah buah tertinggal di mobil harus berupa angka.")
         return
     
     try:
-        berondolan_tertinggal_tph_float = float(entry_berondolan_tertinggal_tph)
+        berondolan_tertinggal_tph_float = float(entry_berondolan_tertinggal_tph.get())
     except ValueError:
-        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        messagebox.showerror("Error", "Nilai jumlah berondolan tertinggal di mobil harus berupa angka.")
         return
     
     try:
-        rotasi_panen_float = float(entry_rotasi_panen)
+        rotasi_panen_float = float(entry_rotasi_panen.get())
     except ValueError:
-        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        messagebox.showerror("Error", "Nilai rotasi panen harus berupa angka.")
         return
     
     try:
-        restan_float = float(entry_restan)
+        restan_float = float(entry_restan.get())
     except ValueError:
-        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        messagebox.showerror("Error", "Nilai restan harus berupa angka.")
         return
     
     try:
-        jaring_float = float(entry_jaring)
+        jaring_float = float(entry_jaring.get())
     except ValueError:
-        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        messagebox.showerror("Error", "Nilai jumlah jaring harus berupa angka.")
         return
     
     try:
-        produktivitas_pemanen_float = float(entry_produktivitas_pemanen)
+        produktivitas_pemanen_float = float(entry_produktivitas_pemanen.get())
     except ValueError:
-        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        messagebox.showerror("Error", "Nilai produktivitas pemanen harus berupa angka.")
         return
     
     try:
-        administrasi_panen_float = float(entry_administrasi_panen)
+        administrasi_panen_float = float(entry_administrasi_panen.get())
     except ValueError:
-        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        messagebox.showerror("Error", "Nilai administrasi panen harus berupa angka.")
         return
     
     try:
-        kualitas_tbs_float = float(entry_kualitas_tbs)
+        kualitas_tbs_float = float(entry_kualitas_tbs.get())
     except ValueError:
-        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        messagebox.showerror("Error", "Nilai kualitas TBS harus berupa angka.")
         return
     
     try:
-        muatan_overload_float = float(entry_muatan_overload)
+        muatan_overload_float = float(entry_muatan_overload.get())
     except ValueError:
-        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
+        messagebox.showerror("Error", "Nilai jumlah muatan overload harus berupa angka.")
         return
     
-    try:
-        upload_note_float = float(entry_upload_note)
-    except ValueError:
-        messagebox.showerror("Error", "Nilai pokok sample harus berupa angka.")
-        return
+    # Get current date
+    current_date = datetime.datetime.now(pytz.timezone('Asia/Jakarta')).strftime("%Y-%m-%d")
     
-    final_qa_scores = analyse_qa_production(combobox_estate.get(), 
-                          entry_divisi.get(),
-                          entry_blok.get(),
-                          pokok_sample_float,
-                          pokok_panen_float,
-                          actual_float,
-                          budget_float,
-                          buah_panen_float,
-                          buah_tertinggal_float,
-                          berondolan_tertinggal_float,
-                          buah_tertinggal_tph_float,
-                          berondolan_tertinggal_tph_float,
-                          rotasi_panen_float,
-                          restan_float,
-                          jaring_float,
-                          produktivitas_pemanen_float,
-                          administrasi_panen_float,
-                          kualitas_tbs_float,
-                          muatan_overload_float)
+    # Compose a new dictionary for the input
+    input_data = {
+        "Estate": combobox_estate.get(),
+        "Divisi": entry_divisi.get(),
+        "Blok": entry_blok.get(),
+        "Panen Rotasi": rotasi_panen_float,
+        "Tanggal Periksa": current_date,
+        "Jumlah Pokok Sample": pokok_sample_float,
+        "Jumlah Pokok Panen": pokok_panen_float,
+        "Actual": actual_float,
+        "Budget": budget_float,
+        "Jumlah Buah Panen": buah_panen_float,
+        "Jumlah Buah Tertinggal": buah_tertinggal_float,
+        "Berondolan Tinggal/Tersangkut": berondolan_tertinggal_float,
+        "Jumlah Buah Tinggal": buah_tertinggal_tph_float,
+        "Jumlah Buah Berondolan": berondolan_tertinggal_tph_float,
+        "Rotasi Panen": rotasi_panen_float,
+        "Restan": restan_float,
+        "Pemakaian Jaring/Terpal": jaring_float,
+        "Produktivitas Pemanen": produktivitas_pemanen_float,
+        "Administrasi Panen": administrasi_panen_float,
+        "Kualitas TBS": kualitas_tbs_float,
+        "Muatan Overload": muatan_overload_float,
+    }
     
-    # Display the results - Pass strings for display as they were entered/selected
-    display_analysis_results(
-        selected_estate, blok, tanggal_rencana_pupuk_str, peilscale, # Pass original peilscale string
-        tanggal_pupuk_terakhir_str, jenis_pupuk_terakhir, rencana_jenis_pupuk,
-        username, current_daily_rainfall, status, reason, recommendation
-    )
+    # Analyze the input values 
+    final_qa_scores, final_qa_nilai = analyse_qa_production(
+                        current_date,
+                        combobox_estate.get(), 
+                        entry_divisi.get(),
+                        entry_blok.get(),
+                        pokok_sample_float,
+                        actual_float,
+                        budget_float,
+                        buah_tertinggal_float,
+                        berondolan_tertinggal_float,
+                        buah_tertinggal_tph_float,
+                        berondolan_tertinggal_tph_float,
+                        rotasi_panen_float,
+                        restan_float,
+                        jaring_float,
+                        produktivitas_pemanen_float,
+                        administrasi_panen_float,
+                        kualitas_tbs_float,
+                        muatan_overload_float)
+    
+    # Save all the input and procesed datas into the spreadsheets
+    save_to_sheet(input_production, "Input - Production", input_data)
+    save_to_sheet(output_production, "Output - Production", final_qa_scores)
+    save_to_sheet(output_weight_production, "Output (Weight) - Production", final_qa_nilai)
 
 # %%
 def submit_missing_dates(selected_estate, missing_dates_list):
@@ -2374,7 +2344,7 @@ def qa_calculate_production():
     label_estate_option.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
     row += 1
 
-    combobox_estate = ttk.Combobox(scrollable_frame, values=["Inti", "Plasma"], width=30, font=("Arial", 10))
+    combobox_estate = ttk.Combobox(scrollable_frame, values=ESTATE_OPTIONS, width=30, font=("Arial", 10))
     combobox_estate.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
     row += 1
 
@@ -2658,6 +2628,7 @@ def main_process():
            username_var, username, \
            input_production, input_nursery, input_chemist, input_fertilizer, \
            output_production, output_nursery , output_chemist, output_fertilizer, \
+           output_weight_production, output_weight_nursery , output_weight_chemist, output_weight_fertilizer, \
            label_username, entry_username, exit_button, label_rainfall_option, \
            button_update_rainfall, button_add_rainfall, back_button, \
            label_menu_qa, combobox_menu_qa, label_chosen_year, combobox_chosen_year, label_note_year, \
@@ -2671,7 +2642,7 @@ def main_process():
            entry_buah_panen, entry_buah_tertinggal, entry_berondolan_tertinggal, entry_buah_tertinggal_tph, \
            entry_berondolan_tertinggal_tph, entry_rotasi_panen, entry_restan, entry_jaring, entry_produktivitas_pemanen, \
            entry_administrasi_panen, entry_kualitas_tbs, entry_muatan_overload, label_upload_note, \
-           label_blok, label_divisi,  label_tanggal_rencana_pupuk, label_pokok_sample, label_pokok_panen, label_actual, label_budget, \
+           label_blok, label_divisi, label_tanggal_rencana_pupuk, label_pokok_sample, label_pokok_panen, label_actual, label_budget, \
            label_buah_panen, label_buah_tertinggal, label_berondolan_tertinggal, label_buah_tertinggal_tph, \
            label_berondolan_tertinggal_tph, label_rotasi_panen, label_restan, label_jaring, label_produktivitas_pemanen, \
            label_administrasi_panen, label_kualitas_tbs, label_muatan_overload, entry_upload_note, \
@@ -2726,7 +2697,9 @@ def main_process():
     label_estate_option = None
     combobox_estate = None
     submit_estate_button = None
+    label_blok = None
     entry_blok = None
+    label_divisi = None
     entry_divisi = None
     label_tanggal_rencana_pupuk = None
     entry_tanggal_rencana_pupuk = None
@@ -2776,8 +2749,6 @@ def main_process():
     submit_estate_add_rainfall_button = None
     entry_daily_rainfall = None
     label_daily_rainfall = None
-    label_blok = None
-    label_divisi = None
     button_input_hujan = None
     button_analisa_pemupukan = None
     button_update_rainfall = None
@@ -2824,6 +2795,12 @@ def main_process():
         output_nursery = client.open_by_url(SHEET_URL).worksheet("Output - Nursery")
         output_chemist = client.open_by_url(SHEET_URL).worksheet("Output - Chemist")
         output_fertilizer = client.open_by_url(SHEET_URL).worksheet("Output - Fertilizer")
+
+        # Sheets for output
+        output_weight_production = client.open_by_url(SHEET_URL).worksheet("Output (Weight) - Production")
+        output_weight_nursery = client.open_by_url(SHEET_URL).worksheet("Output (Weight) - Nursery")
+        output_weight_chemist = client.open_by_url(SHEET_URL).worksheet("Output (Weight) - Chemist")
+        output_weight_fertilizer = client.open_by_url(SHEET_URL).worksheet("Output (Weight) - Fertilizer")
 
         print("Successfully connected to Google Sheets.")
     except Exception as e:
