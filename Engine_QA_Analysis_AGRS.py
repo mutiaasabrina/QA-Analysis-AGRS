@@ -439,7 +439,7 @@ def analyze_fertilizer(date_input, username, estate_name, blok_name, df, peilsca
 # %%
 def evaluate_budget_actual(budget, actual):
 
-    difference_actual_budget = ((actual - budget) / budget) * 100
+    difference_actual_budget = (actual / budget) * 100
 
     if difference_actual_budget > 100: # > 100%
         return 10
@@ -469,7 +469,7 @@ def evaluate_buah_tinggal(buah_tinggal, pokok_sample):
 
 # %%
 def evaluate_berondolan_tinggal(berondolan_tinggal, pokok_sample):
-    perhitungan_berondolan_tinggal = berondolan_tinggal/pokok_sample
+    perhitungan_berondolan_tinggal = berondolan_tinggal / pokok_sample
 
     if perhitungan_berondolan_tinggal <= 0.005: # < 0,5 butir/pkk
         return 10
@@ -547,15 +547,15 @@ def evaluate_restan(restan):
 # Immediately evaluate jaring
 def evaluate_jaring(jaring):
     
-    if jaring > 100: # > 100%
+    if jaring >= 100: # > 100%
         return 10
-    elif 98 < jaring <= 100: # > 98% - 100%
+    elif 98 <= jaring < 100: # > 98% - 100%
         return 8
-    elif 96 < jaring <= 98: # > 96% - 98%
+    elif 96 <= jaring < 98: # > 96% - 98%
         return 6
-    elif 95 < jaring <= 96: # > 95% - 96%
+    elif 95 <= jaring < 96: # > 95% - 96%
         return 4
-    elif jaring > 95: # < 95%
+    elif jaring < 95: # < 95%
         return 2
 
 # %%
@@ -1791,7 +1791,7 @@ def submit_production_analysis():
     }
     
     # Analyze the input values 
-    final_qa_scores, final_qa_nilai = analyse_qa_production(
+    final_qa_nilai, final_qa_nilai = analyse_qa_production(
                         current_date,
                         combobox_estate.get(), 
                         entry_divisi.get(),
@@ -1813,8 +1813,14 @@ def submit_production_analysis():
     
     # Save all the input and procesed datas into the spreadsheets
     save_to_sheet(input_production, "Input - Production", input_data)
-    save_to_sheet(output_production, "Output - Production", final_qa_scores)
+    save_to_sheet(output_production, "Output - Production", final_qa_nilai)
     save_to_sheet(output_weight_production, "Output (Weight) - Production", final_qa_nilai)
+
+    # Compose PDF report
+    generate_pdf_output(current_date, final_qa_nilai, final_qa_nilai)
+
+    # Display success window and go back to main menu
+    show_success_window()
 
 # %%
 def submit_missing_dates(selected_estate, missing_dates_list):
@@ -1935,7 +1941,7 @@ def show_success_window():
     success_window.transient(root) 
     success_window.grab_set()   
 
-    label_success = tk.Label(success_window, text="Update data hujan sukses!", font=("Arial", 12))
+    label_success = tk.Label(success_window, text="Sukses!", font=("Arial", 12))
     label_success.pack(pady=10)
     
     button_back_to_main = tk.Button(success_window, text="Back to Main Menu", command=close_success_and_go_back, font=("Arial", 10), bg=MAIN_MENU_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR) # set color
@@ -2278,18 +2284,97 @@ def choose_and_upload_file():
     upload_photo_to_drive(file_path, note_text)
 
 # %%
-def generate_pdf_output():
+def generate_pdf_output(current_date, final_qa_scores, final_qa_nilai):
     global uploaded_photo_path
 
-    pdf_path = f"hasil_analisa_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    pdf_path = f"hasil_analisa_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     c = canvas.Canvas(pdf_path, pagesize=A4)
     width, height = A4
 
     # --- Sample Text Data (You can replace these with actual values) ---
     c.setFont("Helvetica", 12)
-    c.drawString(50, height - 50, "Hasil Analisa QA Produksi")
-    c.drawString(50, height - 80, f"Tanggal: {datetime.datetime.now().strftime('%d-%m-%Y %H:%M')}")
-    c.drawString(50, height - 110, f"Catatan: {entry_upload_note.get()}")
+
+    height -= 20
+    c.drawString(50, height, f"Tanggal: {current_date}")
+
+    height -= 20
+    c.drawString(50, height, "Hasil Analisa QA Produksi - Score")
+
+    height -= 20
+    c.drawString(50, height, f"Pencapaian Produksi: {final_qa_scores["Pencapaian Produksi"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Kualitas Panen - TBS Tertinggal: {final_qa_scores["Kualitas Panen - TBS Tertinggal"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Kualitas Panen - LF Tertinggal: {final_qa_scores["Kualitas Panen - LF Tertinggal"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Kualitas Transport - Jjg di TPH: {final_qa_scores["Kualitas Transport - Jjg di TPH"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Kualitas Transport - LF di TPH: {final_qa_scores["Kualitas Transport - LF di TPH"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Rotasi Panen: {final_qa_scores["Rotasi Panen"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Restan: {final_qa_scores["Restan"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Pemakaian Jaring/Terpal: {final_qa_scores["Pemakaian Jaring/Terpal"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Produktivitas Pemanen: {final_qa_scores["Produktivitas Pemanen"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Administrasi Panen: {final_qa_scores["Administrasi Panen"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Kualitas TBS: {final_qa_scores["Kualitas TBS"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Muatan Overload: {final_qa_scores["Muatan Overload"]}")
+
+    # Nilai
+    height -= 20
+    c.drawString(50, height, "Hasil Analisa QA Produksi - Nilai")
+
+    height -= 20
+    c.drawString(50, height, f"Pencapaian Produksi: {final_qa_nilai["Pencapaian Produksi"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Kualitas Panen - TBS Tertinggal: {final_qa_nilai["Kualitas Panen - TBS Tertinggal"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Kualitas Panen - LF Tertinggal: {final_qa_nilai["Kualitas Panen - LF Tertinggal"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Kualitas Transport - Jjg di TPH: {final_qa_nilai["Kualitas Transport - Jjg di TPH"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Kualitas Transport - LF di TPH: {final_qa_nilai["Kualitas Transport - LF di TPH"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Rotasi Panen: {final_qa_nilai["Rotasi Panen"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Restan: {final_qa_nilai["Restan"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Pemakaian Jaring/Terpal: {final_qa_nilai["Pemakaian Jaring/Terpal"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Produktivitas Pemanen: {final_qa_nilai["Produktivitas Pemanen"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Administrasi Panen: {final_qa_nilai["Administrasi Panen"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Kualitas TBS: {final_qa_nilai["Kualitas TBS"]}")
+
+    height -= 20
+    c.drawString(50, height, f"Muatan Overload: {final_qa_nilai["Muatan Overload"]}")
 
     # --- Insert the image if available ---
     if uploaded_photo_path and os.path.exists(uploaded_photo_path):
@@ -2502,10 +2587,6 @@ def qa_calculate_production():
 
     button_upload_photo = tk.Button(scrollable_frame, text="Upload Foto", command=choose_and_upload_file, font=("Arial", 10), bg=PRIMARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
     button_upload_photo.grid(row=row, column=0, padx=10, pady=10, sticky="ew")
-    row += 1
-
-    submit_pdf_button = tk.Button(scrollable_frame, text="Buat PDF", command=generate_pdf_output, font=("Arial", 10), bg=PRIMARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
-    submit_pdf_button.grid(row=row, column=0, padx=10, pady=10, sticky="ew")
     row += 1
 
     submit_calculation_production_button = tk.Button(scrollable_frame, text="Submit", command=submit_production_analysis, font=("Arial", 10), bg=PRIMARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
