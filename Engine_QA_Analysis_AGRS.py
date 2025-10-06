@@ -291,6 +291,21 @@ def is_zero_weight_year(reference_key, this_year_weights):
     return False
 
 # %%
+# Specifically used for fertilizer (pemupukan)
+def restructure_data(data_dict):
+    result = []
+    for key, value in data_dict.items():
+        parts = key.split('|')
+        
+        result.append({
+            'Nama': parts[0],
+            'Blok': parts[1],
+            'Tanggal': parts[2],
+            'Baris': int(value['baris'])
+        })
+    return result
+
+# %%
 def upload_photo_to_drive(file_path, note=""):
     try:
         # --- Auth using service account ---
@@ -706,11 +721,12 @@ YEARLY_WEIGHT_PRODUCTION = {
     "Pencapaian Produksi": {"2025": "20%", "2026": "18%", "2027": "15%"},
     "Kualitas Panen - TBS Tertinggal": {"2025": "15%", "2026": "13%", "2027": "12%"},
     "Kualitas Panen - LF Tertinggal": {"2025": "15%", "2026": "13%", "2027": "12%"},
-    "Kualitas Transport - Jjg di TPH": {"2025": "10%", "2026": "8%", "2027": "4%"},
+    "Kualitas Transport - Jjg di TPH": {"2025": "5%", "2026": "8%", "2027": "4%"},
     "Kualitas Transport - LF di TPH": {"2025": "10%", "2026": "8%", "2027": "4%"},
     "Rotasi Panen": {"2025": "15%", "2026": "13%", "2027": "12%"},
-    "Restan": {"2025": "10%", "2026": "10%", "2027": "10%"},
-    "Pemakaian Jaring/Terpal": {"2025": "5%", "2026": "5%", "2027": "5%"},
+    "Restan": {"2025": "8%", "2026": "10%", "2027": "10%"},
+    "Pemakaian Jaring/Terpal": {"2025": "3%", "2026": "5%", "2027": "5%"},
+    "Kualitas Panen - TBS Busuk Tinggal": {"2025": "10%", "2026": "13%", "2027": "12%"},
     "Produktivitas Pemanen": {"2025": "0%", "2026": "7%", "2027": "4%"},
     "Administrasi Panen": {"2025": "0%", "2026": "5%", "2027": "5%"},
     "Kualitas TBS": {"2025": "0%", "2026": "0%", "2027": "12%"},
@@ -839,7 +855,8 @@ def load_database(sheet_url, json_path):
 # %%
 def load_sheets_for_menu(qa_type):
 
-    mobile_produksi_perawatan_input_sheet_name = "Testing"
+    mobile_produksi_input_sheet_name = "Testing"
+    mobile_perawatan_input_sheet_name = "Testing Perawatan"
     mobile_pemupukan_input_sheet_name = "Testing Pemupukan"
     mobile_chemist_input_sheet_name = "Testing Chemist"
 
@@ -869,21 +886,23 @@ def load_sheets_for_menu(qa_type):
     if not input_sheet_name or not output_sheet_name or not output_weight_sheet_name:
         raise Exception("QA type tidak dikenali.")
 
-    mobile_produksi_perawatan_input_worksheet = sheet.worksheet(mobile_produksi_perawatan_input_sheet_name)
+    mobile_produksi_input_worksheet = sheet.worksheet(mobile_produksi_input_sheet_name)
+    mobile_perawatan_input_worksheet = sheet.worksheet(mobile_perawatan_input_sheet_name)
     mobile_pemupukan_input_worksheet = sheet.worksheet(mobile_pemupukan_input_sheet_name)
     mobile_chemist_input_worksheet = sheet.worksheet(mobile_chemist_input_sheet_name)
     input_worksheet = sheet.worksheet(input_sheet_name)
     output_worksheet = sheet.worksheet(output_sheet_name)
     output_weight_worksheet = sheet.worksheet(output_weight_sheet_name)
 
-    df_mobile_produksi_perawatan_input = pd.DataFrame(mobile_produksi_perawatan_input_worksheet.get_all_records())
+    df_mobile_produksi_input = pd.DataFrame(mobile_produksi_input_worksheet.get_all_records())
+    df_mobile_perawatan_input = pd.DataFrame(mobile_perawatan_input_worksheet.get_all_records())
     df_mobile_pemupukan_input = pd.DataFrame(mobile_pemupukan_input_worksheet.get_all_records())
     df_mobile_chemist_input = pd.DataFrame(mobile_chemist_input_worksheet.get_all_records())
     df_input = pd.DataFrame(input_worksheet.get_all_records())
     df_output = pd.DataFrame(output_worksheet.get_all_records())
     df_output_weight = pd.DataFrame(output_weight_worksheet.get_all_records())
 
-    return df_mobile_produksi_perawatan_input, df_mobile_pemupukan_input, df_mobile_chemist_input, df_input, df_output, df_output_weight
+    return df_mobile_produksi_input, df_mobile_perawatan_input, df_mobile_pemupukan_input, df_mobile_chemist_input, df_input, df_output, df_output_weight
 
 # %% [markdown]
 #  ## 6. Core Logic
@@ -942,9 +961,9 @@ def evaluate_berondolan_tertinggal(berondolan_tertinggal, pokok_dipanen):
 
 # %%
 # Immediately buah tertinggal TPH
-def evaluate_buah_tertinggal_tph(buah_tertinggal_tph_float):
+def evaluate_buah_tertinggal_tph(buah_tertinggal_tph, tph_counter):
     global perhitungan_buah_tertinggal_tph
-    perhitungan_buah_tertinggal_tph = (buah_tertinggal_tph_float / 10)
+    perhitungan_buah_tertinggal_tph = (buah_tertinggal_tph / tph_counter)
 
     if perhitungan_buah_tertinggal_tph == 0:  # 0
         return 10
@@ -959,9 +978,9 @@ def evaluate_buah_tertinggal_tph(buah_tertinggal_tph_float):
 
 # %%
 # Immediately berondolan tertinggal TPH
-def evaluate_berondolan_tertinggal_tph(berondolan_tertinggal_tph_float):
+def evaluate_berondolan_tertinggal_tph(berondolan_tertinggal_tph, tph_counter):
     global perhitungan_berondolan_tertinggal_tph
-    perhitungan_berondolan_tertinggal_tph = (berondolan_tertinggal_tph_float / 10)
+    perhitungan_berondolan_tertinggal_tph = (berondolan_tertinggal_tph / tph_counter)
 
     if perhitungan_berondolan_tertinggal_tph < 1:  # < 1
         return 10
@@ -1017,6 +1036,22 @@ def evaluate_jaring(jaring):
     elif 95 <= jaring < 96: # > 95% - 96%
         return 4
     elif jaring < 95: # < 95%
+        return 2
+
+# %%
+def evaluate_tbs_busuk_tinggal(tbs_busuk_tertinggal, pokok_sample):
+    global perhitungan_tbs_busuk_tinggal
+    perhitungan_tbs_busuk_tinggal = (tbs_busuk_tertinggal / pokok_sample) * 100
+
+    if perhitungan_tbs_busuk_tinggal == 0:  # 0%
+        return 10
+    elif 0 < perhitungan_tbs_busuk_tinggal <= 0.2:  # > 0% - 0.2%
+        return 8
+    elif 0.2 < perhitungan_tbs_busuk_tinggal <= 0.4:  # > 0.2% - 0.4%
+        return 6
+    elif 0.4 < perhitungan_tbs_busuk_tinggal <= 0.6:  # > 0.4% - 0.6%
+        return 4
+    elif perhitungan_tbs_busuk_tinggal > 0.6:  # > 0.6%
         return 2
 
 # %%
@@ -1082,21 +1117,23 @@ def evaluate_muatan_overload(muatan_overload):
 # %%
 def analyse_qa_production(
         identifier_data,
-        pokok_sample_float,
+        pokok_sample,
         pokok_dipanen,
-        actual_float,
-        budget_float,
-        buah_tertinggal_float,
-        berondolan_tertinggal_float,
-        buah_tertinggal_tph_float,
-        berondolan_tertinggal_tph_float,
-        rotasi_panen_float,
-        restan_float,
-        jaring_float,
-        produktivitas_pemanen_float,
-        administrasi_panen_float,
-        kualitas_tbs_float,
-        muatan_overload_float):
+        actual,
+        budget,
+        buah_tertinggal,
+        berondolan_tertinggal,
+        buah_tertinggal_tph,
+        berondolan_tertinggal_tph,
+        tph_counter,
+        panen_rotasi,
+        restan,
+        jaring,
+        tbs_busuk_tertinggal,
+        produktivitas_pemanen,
+        administrasi_panen,
+        kualitas_tbs,
+        muatan_overload):
     
     global combobox_chosen_year, chosen_year_weight
     
@@ -1114,29 +1151,31 @@ def analyse_qa_production(
         return
     
     # Evaluate each input
-    score_actual_budget = evaluate_budget_actual(budget_float, actual_float)
+    score_actual_budget = evaluate_budget_actual(budget, actual)
 
-    score_buah_tinggal = evaluate_buah_tinggal(buah_tertinggal_float, pokok_sample_float)
+    score_buah_tinggal = evaluate_buah_tinggal(buah_tertinggal, pokok_sample)
 
-    score_berondolan_tertinggal = evaluate_berondolan_tertinggal(berondolan_tertinggal_float, pokok_dipanen)
+    score_berondolan_tertinggal = evaluate_berondolan_tertinggal(berondolan_tertinggal, pokok_dipanen)
 
-    score_buah_tertinggal_tph = evaluate_buah_tertinggal_tph(buah_tertinggal_tph_float)
+    score_buah_tertinggal_tph = evaluate_buah_tertinggal_tph(buah_tertinggal_tph, tph_counter)
 
-    score_berondolan_tertinggal_tph = evaluate_berondolan_tertinggal_tph(berondolan_tertinggal_tph_float)
+    score_berondolan_tertinggal_tph = evaluate_berondolan_tertinggal_tph(berondolan_tertinggal_tph, tph_counter)
     
-    score_rotasi_perbulan = evaluate_rotasi_panen_bulanan(rotasi_panen_float)
+    score_rotasi_perbulan = evaluate_rotasi_panen_bulanan(panen_rotasi)
 
-    score_restan = evaluate_restan(restan_float)
+    score_restan = evaluate_restan(restan)
 
-    score_jaring = evaluate_jaring(jaring_float)
+    score_jaring = evaluate_jaring(jaring)
 
-    score_produktivitas_pemanen = evaluate_produktivitas_pemanen(produktivitas_pemanen_float)
+    score_tbs_busuk_tertinggal = evaluate_tbs_busuk_tinggal(tbs_busuk_tertinggal, pokok_sample)
 
-    score_administrasi_panen = evaluate_administrasi_panen(administrasi_panen_float)
+    score_produktivitas_pemanen = evaluate_produktivitas_pemanen(produktivitas_pemanen)
 
-    score_kualitas_tbs = evaluate_kualitas_tbs(kualitas_tbs_float)
+    score_administrasi_panen = evaluate_administrasi_panen(administrasi_panen)
 
-    score_muatan_overload = evaluate_muatan_overload(muatan_overload_float)
+    score_kualitas_tbs = evaluate_kualitas_tbs(kualitas_tbs)
+
+    score_muatan_overload = evaluate_muatan_overload(muatan_overload)
 
     # Store all the calculated scores in to dictionary 
     scores = {
@@ -1148,6 +1187,7 @@ def analyse_qa_production(
         "Rotasi Panen": score_rotasi_perbulan,
         "Restan": score_restan,
         "Pemakaian Jaring/Terpal": score_jaring,
+        "Kualitas Panen - TBS Busuk Tinggal": score_tbs_busuk_tertinggal,
         "Produktivitas Pemanen": score_produktivitas_pemanen,
         "Administrasi Panen": score_administrasi_panen,
         "Kualitas TBS": score_kualitas_tbs,
@@ -2007,7 +2047,8 @@ def convert_berondolan_tertinggal_tph_to_score(berondolan_tertinggal_tph):
 
 # %%
 def submit_production_analysis():
-    global df_mobile_produksi_perawatan_input, entry_tanggal_qa_terakhir, selected_estate, selected_divisi, selected_blok, available_blok_list
+    global df_mobile_produksi_input, entry_tanggal_qa_terakhir, selected_estate, selected_divisi, selected_blok, available_blok_list, \
+        tph_counter
 
     try:
         actual = cek_entry_number("entry", entry_actual, 0.0)
@@ -2045,11 +2086,11 @@ def submit_production_analysis():
 
     try:
         divisi_val = int(divisi) if str(divisi).isdigit() else divisi
-        filtered_df = df_mobile_produksi_perawatan_input[
-            (df_mobile_produksi_perawatan_input['Tanggal'] == tanggal_dt) &
-            (df_mobile_produksi_perawatan_input['Kebun'] == estate) &
-            (df_mobile_produksi_perawatan_input['Divisi'] == divisi_val) &
-            (df_mobile_produksi_perawatan_input['Blok'] == blok)
+        filtered_df = df_mobile_produksi_input[
+            (df_mobile_produksi_input['Tanggal'] == tanggal_dt) &
+            (df_mobile_produksi_input['Kebun'] == estate) &
+            (df_mobile_produksi_input['Divisi'] == divisi_val) &
+            (df_mobile_produksi_input['Blok'] == blok)
         ]
     except Exception as e:
         messagebox.showerror("Error", f"Terjadi error saat filter data: {e}")
@@ -2071,10 +2112,12 @@ def submit_production_analysis():
     pokok_dipanen = float(filtered_df["Pkk Dipanen"].sum())
     pokok_panen = float(filtered_df["Pkk Dipanen"].sum())
     buah_panen = float(filtered_df["Buah Dipanen"].sum())
-    buah_tertinggal = float(filtered_df["Buah Matang Tidak Dipanen"].sum() + filtered_df["Buah Busuk Tidak Dipanen"].sum())
     berondolan_tertinggal = float(filtered_df["LF Tinggal"].sum())
-    buah_tertinggal_tph = float(filtered_df["Buah Tinggal (TPH)"].sum())
+    buah_tertinggal = float(filtered_df["Buah Matang Tidak Dipanen"].sum() + filtered_df["Buah Tinggal (pr, pk, pp, lp)"].sum())
+    tbs_busuk_tertinggal = float(filtered_df["Buah Busuk Tidak Dipanen"].sum())
     berondolan_tertinggal_tph = float(filtered_df["LF Tinggal (TPH)"].sum())
+    buah_tertinggal_tph = float(filtered_df["Buah Tinggal (TPH)"].sum())
+    tph_counter = float(filtered_df["TPH Counter"].sum())
     panen_rotasi = filtered_df["Rotasi"].iloc[0]
     
     # Compose a new dictionary for the input
@@ -2102,6 +2145,7 @@ def submit_production_analysis():
         "Rotasi Panen": panen_rotasi,
         "Restan": restan,
         "Pemakaian Jaring/Terpal": jaring,
+        "Kualitas Panen -TBS Busuk Tinggal": tbs_busuk_tertinggal,
         "Produktivitas Pemanen": produktivitas_pemanen,
         "Administrasi Panen": administrasi_panen,
         "Kualitas TBS": kualitas_tbs,
@@ -2121,9 +2165,11 @@ def submit_production_analysis():
         berondolan_tertinggal,
         buah_tertinggal_tph,
         berondolan_tertinggal_tph,
+        tph_counter,
         panen_rotasi,
         restan,
         jaring,
+        tbs_busuk_tertinggal,
         produktivitas_pemanen,
         administrasi_panen,
         kualitas_tbs,
@@ -2150,41 +2196,31 @@ def submit_production_analysis():
 # ### 10.2 QA Nursery
 
 # %%
-def convert_titi_panen_to_score(
-        titi_panen_kondisi_standar_permanen_baik, 
-        titi_panen_kondisi_standar_semi_permanen_baik, 
-        titi_panen_kondisi_kurang_standar_semi_permanen_baik, 
-        titi_panen_kondisi_kurang_standar_semi_permanen_rusak, 
-        titi_panen_kondisi_tidak_ada):
+def convert_titi_panen_to_score(titi_panen):
     """Convert Titi Panen to score."""
-    if titi_panen_kondisi_standar_permanen_baik > 0:
+    if titi_panen == "Rasio Standar, Permanen, Kondisi Baik":
         return 10
-    elif titi_panen_kondisi_standar_semi_permanen_baik > 0:
+    elif titi_panen == "Rasio Standar, Semi Permanen, Kondisi Baik":
         return 8
-    elif titi_panen_kondisi_kurang_standar_semi_permanen_baik > 0:
+    elif titi_panen == "Rasio Kurang Standar, Semi Permanen, Kondisi Baik":
         return 6
-    elif titi_panen_kondisi_kurang_standar_semi_permanen_rusak > 0:
+    elif titi_panen == "Rasio Kurang Standar, Semi Permanen, Kondisi Rusak":
         return 4
-    elif titi_panen_kondisi_tidak_ada > 0:
+    elif titi_panen == "Tidak Ada Sama Sekali":
         return 2
 
 # %%
-def convert_jalan_jembatan_to_score(
-        jalan_jembatan_rata_permanen,
-        jalan_jembatan_sedang_permanen,
-        jalan_jembatan_rusak_sebagian,
-        jalan_jembatan_dominan_rusak,
-        jalan_jembatan_parah):
+def convert_jalan_jembatan_to_score(jalan_jembatan):
     """Convert Jalan/Jembatan to score."""
-    if jalan_jembatan_rata_permanen > 0:
+    if jalan_jembatan == "Jalan Rata (Tidak Lubang/Rel), Jembatan Permanen":
         return 10
-    elif jalan_jembatan_sedang_permanen > 0:
+    elif jalan_jembatan == "Jalan Kondisi Sedang, Jembatan Permanen":
         return 8
-    elif jalan_jembatan_rusak_sebagian > 0:
+    elif jalan_jembatan == "Jalan Rusak Sebagian, Jembatan Rusak Sebagian":
         return 6
-    elif jalan_jembatan_dominan_rusak > 0:
+    elif jalan_jembatan == "Jalan Dominan Rusak, Jembatan Rusak":
         return 4
-    elif jalan_jembatan_parah > 0:
+    elif jalan_jembatan == "Jalan Rusak Parah, Jembatan Rusak Parah":
         return 2
 
 # %%
@@ -2212,17 +2248,17 @@ def convert_peilscale_to_score(peilscale):
         return 6
     elif peilscale == "-10cm sampai 0cm, kondisi rusak, update":
         return 4
-    elif peilscale == ">0cm, kondisi rusak, tidak update":
+    elif peilscale == ">0cm, kondisi rusak, tidak update":
         return 2
 
 # %%
 def convert_barn_owl_to_score(barn_owl):
     """Convert Barn Owl to score."""
-    if barn_owl == "Rasio gupon <40 ha, Ada burung hantu,  gupon aktif, kondisi baik, sensus rutin":
+    if barn_owl == "Rasio gupon <40 ha, Ada burung hantu, gupon aktif, kondisi baik, sensus rutin":
         return 10
-    elif barn_owl == "Ada burung hantu,  gupon aktif, kondisi baik, sensus rutin":
+    elif barn_owl == "Ada burung hantu, gupon aktif, kondisi baik, sensus rutin":
         return 8
-    elif barn_owl == "Ada atau tidak ada burung hantu,  gupon aktif, kondisi baik atau rusak, sensus jarang":
+    elif barn_owl == "Ada atau tidak ada burung hantu, gupon aktif, kondisi baik atau rusak, sensus jarang":
         return 6
     elif barn_owl == "Tidak ada burung hantu, ada gupon, kondisi baik atau rusak, sensus jarang":
         return 4
@@ -2231,7 +2267,7 @@ def convert_barn_owl_to_score(barn_owl):
 
 # %%
 def submit_nursery_analysis(): 
-    global df_mobile_produksi_perawatan_input, entry_tanggal_qa_terakhir, selected_estate, selected_divisi, selected_blok, available_blok_list
+    global df_mobile_perawatan_input, entry_tanggal_qa_terakhir, selected_estate, selected_divisi, selected_blok, available_blok_list
 
     try:
         cover_crop = cek_entry_number("cover crop", entry_cover_crop, 0.0)
@@ -2263,11 +2299,11 @@ def submit_nursery_analysis():
 
     try:
         divisi_val = int(divisi) if str(divisi).isdigit() else divisi
-        filtered_df = df_mobile_produksi_perawatan_input[
-            (df_mobile_produksi_perawatan_input['Tanggal'] == tanggal_dt) &
-            (df_mobile_produksi_perawatan_input['Kebun'] == estate) &
-            (df_mobile_produksi_perawatan_input['Divisi'] == divisi_val) &
-            (df_mobile_produksi_perawatan_input['Blok'] == blok)
+        filtered_df = df_mobile_perawatan_input[
+            (df_mobile_perawatan_input['Tanggal'] == tanggal_dt) &
+            (df_mobile_perawatan_input['Kebun'] == estate) &
+            (df_mobile_perawatan_input['Divisi'] == divisi_val) &
+            (df_mobile_perawatan_input['Blok'] == blok)
         ]
     except Exception as e:
         messagebox.showerror("Error", f"Terjadi error saat filter data: {e}")
@@ -2292,8 +2328,8 @@ def submit_nursery_analysis():
     circle_tidak_baik = filtered_df["Kondisi Circle Semak"].sum() + filtered_df["Kondisi Circle Dominan Anak Sawit"].sum()+ filtered_df["Kondisi Circle Dominan Sampah (Berondolan Busuk)"].sum()
     path_baik = filtered_df["Kondisi Path Baik"].sum()
     path_tidak_baik = filtered_df["Kondisi Path Tidak Baik"].sum()
-    tph_baik = filtered_df["Kondisi TPH Baik"].sum()
-    tph_tidak_baik = filtered_df["Kondisi TPH Tidak Baik"].sum()
+    tph_baik = (filtered_df["Kondisi TPH"] == "Baik").sum()
+    tph_tidak_baik = (filtered_df["Kondisi TPH"] == "Tidak Baik").sum()
     lalang_ada = filtered_df["Lalang Ada"].sum()
     lalang_tidak_ada = filtered_df["Lalang Tidak Ada"].sum()
     anak_kayu_ada = filtered_df["Anak Kayu Ada"].sum()
@@ -2304,16 +2340,8 @@ def submit_nursery_analysis():
     purun_tikus_tidak_ada = filtered_df["Purun Tikus Tidak Ada"].sum()
     pakis_udang_ada = filtered_df["Pakis Udang Ada"].sum()
     pakis_udang_tidak_ada = filtered_df["Pakis Udang Tidak Ada"].sum()
-    titi_panen_kondisi_standar_permanen_baik = filtered_df["Titi Panen Kondisi Standar Permanen Baik"].iloc[0]
-    titi_panen_kondisi_standar_semi_permanen_baik = filtered_df["Titi Panen Kondisi Standar Semi Permanen Baik"].iloc[0]
-    titi_panen_kondisi_kurang_standar_semi_permanen_baik = filtered_df["Titi Panen Kondisi Kurang Standar Semi Permanen Baik"].iloc[0]
-    titi_panen_kondisi_kurang_standar_semi_permanen_rusak = filtered_df["Titi Panen Kondisi Kurang Standar Semi Permanen Rusak"].iloc[0]
-    titi_panen_kondisi_tidak_ada = filtered_df["Titi Panen Kondisi Tidak Ada"].iloc[0]
-    jalan_jembatan_rata_permanen = filtered_df["Jalan Jembatan Rata Permanen"].iloc[0]
-    jalan_jembatan_sedang_permanen = filtered_df["Jalan Jembatan Sedang Permanen"].iloc[0]
-    jalan_jembatan_rusak_sebagian = filtered_df["Jalan Jembatan Rusak Sebagian"].iloc[0]
-    jalan_jembatan_dominan_rusak = filtered_df["Jalan Jembatan Dominan Rusak"].iloc[0]
-    jalan_jembatan_parah = filtered_df["Jalan Jembatan Parah"].iloc[0]
+    titi_panen = filtered_df["Titi Panen"].iloc[0]
+    jalan_jembatan = filtered_df["Jalan Jembatan"].iloc[0]
     pruning_baik = filtered_df["Pruning Baik"].sum()
     pruning_over = filtered_df["Pruning Over"].sum()
     pruning_sengkleh = filtered_df["Pruning Sengkleh"].sum()
@@ -2330,19 +2358,9 @@ def submit_nursery_analysis():
     serangan_updks_tidak_ada = filtered_df["UPDPKS Tidak Ada"].sum()
         
     # Convert combobox option to float
-    score_titi_panen = convert_titi_panen_to_score(
-        titi_panen_kondisi_standar_permanen_baik,
-        titi_panen_kondisi_standar_semi_permanen_baik,
-        titi_panen_kondisi_kurang_standar_semi_permanen_baik,
-        titi_panen_kondisi_kurang_standar_semi_permanen_rusak,
-        titi_panen_kondisi_tidak_ada)
+    score_titi_panen = convert_titi_panen_to_score(titi_panen)
 
-    score_jalan_jembatan = convert_jalan_jembatan_to_score(
-        jalan_jembatan_rata_permanen,
-        jalan_jembatan_sedang_permanen,
-        jalan_jembatan_rusak_sebagian,
-        jalan_jembatan_dominan_rusak,
-        jalan_jembatan_parah)
+    score_jalan_jembatan = convert_jalan_jembatan_to_score(jalan_jembatan)
 
     score_beneficial_plant = convert_beneficial_plant_to_score(beneficial_plant)
 
@@ -2378,16 +2396,8 @@ def submit_nursery_analysis():
         "Purun Tikus Tidak Ada": purun_tikus_tidak_ada,
         "Pakis Udang Ada": pakis_udang_ada,
         "Pakis Udang Tidak Ada": pakis_udang_tidak_ada,
-        "Titi Panen Kondisi Standar Permanen Baik": titi_panen_kondisi_standar_permanen_baik,
-        "Titi Panen Kondisi Standar Semi Permanen Baik": titi_panen_kondisi_standar_semi_permanen_baik,
-        "Titi Panen Kondisi Kurang Standar Semi Permanen Baik": titi_panen_kondisi_kurang_standar_semi_permanen_baik,
-        "Titi Panen Kondisi Kurang Standar Semi Permanen Rusak": titi_panen_kondisi_kurang_standar_semi_permanen_rusak,
-        "Titi Panen Kondisi Tidak Ada": titi_panen_kondisi_tidak_ada,
-        "Jalan Jembatan Rata Permanen": jalan_jembatan_rata_permanen,
-        "Jalan Jembatan Sedang Permanen": jalan_jembatan_sedang_permanen,
-        "Jalan Jembatan Rusak Sebagian": jalan_jembatan_rusak_sebagian,
-        "Jalan Jembatan Dominan Rusak": jalan_jembatan_dominan_rusak,
-        "Jalan Jembatan Parah": jalan_jembatan_parah,
+        "Titi Panen": titi_panen,
+        "Jalan Jembatan": jalan_jembatan,
         "Pruning Baik": pruning_baik,
         "Pruning Over": pruning_over,
         "Pruning Sengkleh": pruning_sengkleh,
@@ -2964,7 +2974,6 @@ def submit_chemist_analysis():
     # Get the values from the filtered DataFrame
     tanggal_semprot = filtered_df["Tanggal Semprot"].iloc[0]
     dosis_knapsack = filtered_df["Dosis Knapsack"].iloc[0]
-    dosis_knapsack = filtered_df["Dosis Knapsack"].iloc[0]
     luas = filtered_df["Luas"].sum()
     # total_tenaga_semprot = filtered_df["Total Tenaga Kerja"].sum()
     pokok_sample = filtered_df["Jumlah Pokok"].sum()
@@ -3243,7 +3252,7 @@ def go_to_reanalyze():
 # %%
 def goto_chosen_qa_menu():
     global previous_menu, \
-        df_mobile_produksi_perawatan_input, df_mobile_pemupukan_input, df_mobile_chemist_input, df_input, df_output, df_output_weight, \
+        df_mobile_produksi_input, df_mobile_perawatan_input, df_mobile_pemupukan_input, df_mobile_chemist_input, df_input, df_output, df_output_weight, \
         available_estate_list, available_divisi_list, available_blok_list
 
     if not root_exists: return
@@ -3281,7 +3290,7 @@ def goto_chosen_qa_menu():
 
     # 5 Get the input and ouput data based on the chosen menu 
     try:
-        df_mobile_produksi_perawatan_input, df_mobile_pemupukan_input, df_mobile_chemist_input, df_input, df_output, df_output_weight = load_sheets_for_menu(menu_qa)
+        df_mobile_produksi_input, df_mobile_perawatan_input, df_mobile_pemupukan_input, df_mobile_chemist_input, df_input, df_output, df_output_weight = load_sheets_for_menu(menu_qa)
         
     except Exception as e:
         messagebox.showerror("Error", f"Gagal memuat data untuk {menu_qa}: {e}")
@@ -3599,7 +3608,7 @@ def qa_data_overview(chosen_menu_qa, qa_score):
 # %%
 def goto_chosen_data_overview_menu():
     global previous_menu, \
-    df_mobile_produksi_perawatan_input, df_mobile_pemupukan_input, df_mobile_chemist_input, df_input, df_output, df_output_weight
+    df_mobile_produksi_input, df_mobile_perawatan_input, df_mobile_pemupukan_input, df_mobile_chemist_input, df_input, df_output, df_output_weight
 
     if not root_exists: return
 
@@ -3630,7 +3639,7 @@ def goto_chosen_data_overview_menu():
 
     # 4. Get the input and ouput data based on the chosen menu 
     try:
-        df_mobile_produksi_perawatan_input, df_mobile_pemupukan_input, df_mobile_chemist_input, df_input, df_output, df_output_weight = load_sheets_for_menu(menu_qa)
+        df_mobile_produksi_input, df_mobile_perawatan_input, df_mobile_pemupukan_input, df_mobile_chemist_input, df_input, df_output, df_output_weight = load_sheets_for_menu(menu_qa)
 
         # Check for empty DataFrames
         if df_input.empty or df_output.empty or df_output_weight.empty:
@@ -3810,11 +3819,13 @@ def generate_pdf_output(final_qa_scores, final_qa_nilai, combobox_menu_qa, input
             elif key ==  "Kualitas Panen - LF Tertinggal":
                 keterangan = f"{perhitungan_berondolan_tertinggal:.2f} butir/pokok"
             elif key == "Kualitas Transport - Jjg di TPH":
-                keterangan = f"{perhitungan_buah_tertinggal_tph:.2f} Jjg/TPH"
+                keterangan = f"{perhitungan_buah_tertinggal_tph:.2f} Jjg/TPH (Sample {tph_counter} TPH)"
             elif key == "Kualitas Transport - LF di TPH":
-                keterangan = f"{perhitungan_berondolan_tertinggal_tph:.2f} Btr/TPH (Sample 10 TPH)"
+                keterangan = f"{perhitungan_berondolan_tertinggal_tph:.2f} Btr/TPH (Sample {tph_counter} TPH)"
             elif key == "Rotasi Panen":
                 keterangan = f"{(DAY_IN_MONTH/input_data["Rotasi Panen"]):.2f} (Pusingan {input_data["Rotasi Panen"]} hari)"
+            elif key == "Kualitas Panen - TBS Busuk Tinggal":
+                keterangan = f"{perhitungan_tbs_busuk_tinggal:.2f}% buah busuk tinggal"
             else:
                 keterangan = ""
 
@@ -3987,7 +3998,7 @@ def generate_pdf_output(final_qa_scores, final_qa_nilai, combobox_menu_qa, input
 
                 photo = photos_data[i + j]
                 file_path = photo.get("file_var").get()
-                note = photo.get("note_var").get()
+                note = "-" if photo.get("note_var").get() == "Masukkan catatan..." else photo.get("note_var").get()
 
                 if os.path.exists(file_path):
                     try:
@@ -4041,7 +4052,7 @@ def toggle_qa_visibility(*args):
 
 # %%
 def process_production_calculation(df_mobile_input):
-    global tree
+    global tree, tph_counter
     if not is_widget_alive(tree):
         messagebox.showerror("Error", "Tabel hasil tidak tersedia.")
         return
@@ -4082,11 +4093,11 @@ def process_production_calculation(df_mobile_input):
 
     try:
         divisi_val = int(divisi) if str(divisi).isdigit() else divisi
-        filtered_df = df_mobile_input[
-            (df_mobile_input['Tanggal'] == tanggal_dt) &
-            (df_mobile_input['Kebun'] == estate) &
-            (df_mobile_input['Divisi'] == divisi_val) &
-            (df_mobile_input['Blok'] == blok)
+        filtered_df = df_mobile_produksi_input[
+            (df_mobile_produksi_input['Tanggal'] == tanggal_dt) &
+            (df_mobile_produksi_input['Kebun'] == estate) &
+            (df_mobile_produksi_input['Divisi'] == divisi_val) &
+            (df_mobile_produksi_input['Blok'] == blok)
         ]
     except Exception as e:
         messagebox.showerror("Error", f"Terjadi error saat filter data: {e}")
@@ -4098,11 +4109,13 @@ def process_production_calculation(df_mobile_input):
         
     pokok_sample = filtered_df["Jumlah Pokok"].sum()
     pokok_dipanen = filtered_df["Pkk Dipanen"].sum()
-    buah_tertinggal = filtered_df["Buah Matang Tidak Dipanen"].sum() + filtered_df["Buah Busuk Tidak Dipanen"].sum()
     berondolan_tertinggal = filtered_df["LF Tinggal"].sum()
-    berondolan_tertinggal_tph = filtered_df["LF Tinggal (TPH)"].sum()
-    buah_tertinggal_tph = filtered_df["Buah Tinggal (TPH)"].sum()
+    buah_tertinggal = filtered_df["Buah Matang Tidak Dipanen"].sum() + filtered_df["Buah Tinggal (pr, pk, pp, lp)"].sum()
+    berondolan_tertinggal_tph = float(filtered_df["LF Tinggal (TPH)"].sum())
+    buah_tertinggal_tph = float(filtered_df["Buah Tinggal (TPH)"].sum())
+    tph_counter = float(filtered_df["TPH Counter"].sum())
     panen_rotasi = filtered_df["Rotasi"].iloc[0]
+    tbs_busuk_tertinggal = filtered_df["Buah Busuk Tidak Dipanen"].sum()
 
     # Hitung skor menggunakan fungsi yang sudah ada
     table = []
@@ -4110,11 +4123,12 @@ def process_production_calculation(df_mobile_input):
         "Pencapaian Produksi": evaluate_budget_actual(budget, actual),
         "Kualitas Panen - TBS Tertinggal": evaluate_buah_tinggal(buah_tertinggal, pokok_sample),
         "Kualitas Panen - LF Tertinggal": evaluate_berondolan_tertinggal(berondolan_tertinggal, pokok_dipanen),
-        "Kualitas Transport - Jjg di TPH": evaluate_buah_tertinggal_tph(buah_tertinggal_tph),
-        "Kualitas Transport - LF di TPH": evaluate_berondolan_tertinggal_tph(berondolan_tertinggal_tph),
+        "Kualitas Transport - Jjg di TPH": evaluate_buah_tertinggal_tph(buah_tertinggal_tph, tph_counter),
+        "Kualitas Transport - LF di TPH": evaluate_berondolan_tertinggal_tph(berondolan_tertinggal_tph, tph_counter),
         "Rotasi Panen": evaluate_rotasi_panen_bulanan(panen_rotasi),
         "Restan": evaluate_restan(restan),
         "Pemakaian Jaring/Terpal": evaluate_jaring(jaring),
+        "Kualitas Panen - TBS Busuk Tinggal": evaluate_tbs_busuk_tinggal(tbs_busuk_tertinggal, pokok_sample),
         "Produktivitas Pemanen": evaluate_produktivitas_pemanen(produktivitas_pemanen),
         "Administrasi Panen": evaluate_administrasi_panen(administrasi_panen),
         "Kualitas TBS": evaluate_kualitas_tbs(kualitas_tbs),
@@ -4136,11 +4150,13 @@ def process_production_calculation(df_mobile_input):
         elif key ==  "Kualitas Panen - LF Tertinggal":
             ket = f"{perhitungan_berondolan_tertinggal:.2f} butir/pokok"
         elif key == "Kualitas Transport - Jjg di TPH":
-            ket = f"{perhitungan_buah_tertinggal_tph:.2f} Jjg/TPH"
+            ket = f"{perhitungan_buah_tertinggal_tph:.2f} Jjg/TPH (Sample {tph_counter} TPH)"
         elif key == "Kualitas Transport - LF di TPH":
-            ket = f"{perhitungan_berondolan_tertinggal_tph:.2f} Btr/TPH (Sample 10 TPH)"
+            ket = f"{perhitungan_berondolan_tertinggal_tph:.2f} Btr/TPH (Sample {tph_counter} TPH)"
         elif key == "Rotasi Panen":
             ket = f"{(DAY_IN_MONTH/panen_rotasi):.2f} (Pusingan {panen_rotasi} hari)"
+        elif key == "Kualitas Panen - TBS Busuk Tinggal":
+            ket = f"{perhitungan_tbs_busuk_tinggal:.2f}% buah busuk tinggal"
         else:
             ket = ""
 
@@ -4202,11 +4218,11 @@ def process_nursery_calculation(df_mobile_input):
 
     try:
         divisi_val = int(divisi) if str(divisi).isdigit() else divisi
-        filtered_df = df_mobile_produksi_perawatan_input[
-            (df_mobile_produksi_perawatan_input['Tanggal'] == tanggal_dt) &
-            (df_mobile_produksi_perawatan_input['Kebun'] == estate) &
-            (df_mobile_produksi_perawatan_input['Divisi'] == divisi_val) &
-            (df_mobile_produksi_perawatan_input['Blok'] == blok)
+        filtered_df = df_mobile_perawatan_input[
+            (df_mobile_perawatan_input['Tanggal'] == tanggal_dt) &
+            (df_mobile_perawatan_input['Kebun'] == estate) &
+            (df_mobile_perawatan_input['Divisi'] == divisi_val) &
+            (df_mobile_perawatan_input['Blok'] == blok)
         ]
     except Exception as e:
         messagebox.showerror("Error", f"Terjadi error saat filter data: {e}")
@@ -4224,8 +4240,8 @@ def process_nursery_calculation(df_mobile_input):
     circle_tidak_baik = filtered_df["Kondisi Circle Semak"].sum() + filtered_df["Kondisi Circle Dominan Anak Sawit"].sum()+ filtered_df["Kondisi Circle Dominan Sampah (Berondolan Busuk)"].sum()
     path_baik = filtered_df["Kondisi Path Baik"].sum()
     path_tidak_baik = filtered_df["Kondisi Path Tidak Baik"].sum()
-    tph_baik = filtered_df["Kondisi TPH Baik"].sum()
-    tph_tidak_baik = filtered_df["Kondisi TPH Tidak Baik"].sum()
+    tph_baik = (filtered_df["Kondisi TPH"] == "Baik").sum()
+    tph_tidak_baik = (filtered_df["Kondisi TPH"] == "Tidak Baik").sum()
     lalang_ada = filtered_df["Lalang Ada"].sum()
     lalang_tidak_ada = filtered_df["Lalang Tidak Ada"].sum()
     anak_kayu_ada = filtered_df["Anak Kayu Ada"].sum()
@@ -4236,16 +4252,8 @@ def process_nursery_calculation(df_mobile_input):
     purun_tikus_tidak_ada = filtered_df["Purun Tikus Tidak Ada"].sum()
     pakis_udang_ada = filtered_df["Pakis Udang Ada"].sum()
     pakis_udang_tidak_ada = filtered_df["Pakis Udang Tidak Ada"].sum()
-    titi_panen_kondisi_standar_permanen_baik = filtered_df["Titi Panen Kondisi Standar Permanen Baik"].iloc[0]
-    titi_panen_kondisi_standar_semi_permanen_baik = filtered_df["Titi Panen Kondisi Standar Semi Permanen Baik"].iloc[0]
-    titi_panen_kondisi_kurang_standar_semi_permanen_baik = filtered_df["Titi Panen Kondisi Kurang Standar Semi Permanen Baik"].iloc[0]
-    titi_panen_kondisi_kurang_standar_semi_permanen_rusak = filtered_df["Titi Panen Kondisi Kurang Standar Semi Permanen Rusak"].iloc[0]
-    titi_panen_kondisi_tidak_ada = filtered_df["Titi Panen Kondisi Tidak Ada"].iloc[0]
-    jalan_jembatan_rata_permanen = filtered_df["Jalan Jembatan Rata Permanen"].iloc[0]
-    jalan_jembatan_sedang_permanen = filtered_df["Jalan Jembatan Sedang Permanen"].iloc[0]
-    jalan_jembatan_rusak_sebagian = filtered_df["Jalan Jembatan Rusak Sebagian"].iloc[0]
-    jalan_jembatan_dominan_rusak = filtered_df["Jalan Jembatan Dominan Rusak"].iloc[0]
-    jalan_jembatan_parah = filtered_df["Jalan Jembatan Parah"].iloc[0]
+    titi_panen = filtered_df["Titi Panen"].iloc[0]
+    jalan_jembatan = filtered_df["Jalan Jembatan"].iloc[0]
     pruning_baik = filtered_df["Pruning Baik"].sum()
     pruning_over = filtered_df["Pruning Over"].sum()
     pruning_sengkleh = filtered_df["Pruning Sengkleh"].sum()
@@ -4266,8 +4274,8 @@ def process_nursery_calculation(df_mobile_input):
     score_dict = {
         "Kondisi Circle, Path dan TPH": evaluate_kondisi_circle_path_tph(circle_baik, path_baik, tph_baik, pokok_sample),
         "Kondisi Gawangan": evaluate_kondisi_gawangan(lalang_tidak_ada, anak_kayu_tidak_ada, perumpung_tidak_ada, purun_tikus_tidak_ada, pakis_udang_tidak_ada, pokok_sample),
-        "Titi Panen": convert_titi_panen_to_score(titi_panen_kondisi_standar_permanen_baik, titi_panen_kondisi_standar_semi_permanen_baik, titi_panen_kondisi_kurang_standar_semi_permanen_baik, titi_panen_kondisi_kurang_standar_semi_permanen_rusak, titi_panen_kondisi_tidak_ada),
-        "Jalan & Jembatan": convert_jalan_jembatan_to_score(jalan_jembatan_rata_permanen, jalan_jembatan_sedang_permanen, jalan_jembatan_rusak_sebagian, jalan_jembatan_dominan_rusak, jalan_jembatan_parah),
+        "Titi Panen": convert_titi_panen_to_score(titi_panen),
+        "Jalan & Jembatan": convert_jalan_jembatan_to_score(jalan_jembatan),
         "Pruning dan Sanitasi": evaluate_pruning_sanitasi(pruning_baik, pokok_sample),
         "Susunan Pelepah": evaluate_susunan_pelepah(pelepah_rapi, pokok_sample),
         "Hama Penyakit": evaluate_hama_penyakit(serangan_tikus_ada, serangan_rayap_ada, serangan_thirathaba_ada, serangan_updks_ada, pokok_sample),
@@ -4399,6 +4407,9 @@ def process_fertilizer_calculation(df_mobile_input):
     cara_aplikasi_standar = filtered_df["Cara Aplikasi Standar"].sum()
     cara_aplikasi_tidak_standar = filtered_df["Cara Aplikasi Tidak Standar"].sum()
     total_cara_aplikasi = cara_aplikasi_standar + cara_aplikasi_tidak_standar
+    total_alat_tabur = filtered_df["Total Alat Tabur"].sum()
+    total_alat_tabur_seragam = filtered_df["Alat Tabur Seragam"].sum()
+    total_alat_tabur_tidak_seragam = filtered_df["Alat Tabur Tidak Seragam"].sum()
     total_dosis_sesuai = filtered_df["Total Dosis Sesuai"].sum()
     total_dosis_tidak_sesuai = filtered_df["Total Dosis Tidak Sesuai"].sum()
     total_dosis = total_dosis_sesuai + total_dosis_tidak_sesuai
@@ -4427,19 +4438,8 @@ def process_fertilizer_calculation(df_mobile_input):
     
     # Hitung daftar alat & total pekerja dari tenaga tabur
     filtered_df['Daftar Tenaga Tabur Dict'] = filtered_df['Daftar Tenaga Tabur'].apply(lambda x: json.loads(x) if isinstance(x, str) else x)
-    daftar_tenaga_tabur = [person for sublist in filtered_df['Daftar Tenaga Tabur Dict'] for person in sublist]
-
-    temp_df = pd.DataFrame(daftar_tenaga_tabur)
-    temp_df.drop_duplicates(subset='tenagaTabur', inplace=True)
-
-    temp_df['jumlah'] = pd.to_numeric(temp_df['jumlah'], errors='coerce')
-    temp_df['seragam'] = pd.to_numeric(temp_df['seragam'], errors='coerce')
-    temp_df['tidakSeragam'] = pd.to_numeric(temp_df['tidakSeragam'], errors='coerce')
-
-    total_tenaga_pemupuk = len(temp_df['tenagaTabur'])
-    total_alat_tabur = temp_df['jumlah'].sum()
-    total_alat_tabur_seragam = temp_df['seragam'].sum()
-    total_alat_tabur_tidak_seragam = temp_df['tidakSeragam'].sum()
+    filtered_df['Rapi Daftar Tenaga Tabur'] = filtered_df['Daftar Tenaga Tabur Dict'].apply(restructure_data)
+    total_tenaga_pemupuk = len(set(filtered_df['Rapi Daftar Tenaga Tabur'].explode().apply(lambda x: x['Nama'])))
 
     # Hitung skor menggunakan fungsi yang sudah ada
     table = []
@@ -4793,7 +4793,7 @@ def qa_calculate_production():
     entry_tanggal_qa_terakhir = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
     row += 1
 
-    button_tanggal_qa_terakhir = make_button(scrollable_frame, text="Select Date", row=row, command=lambda: [get_date(entry_tanggal_qa_terakhir), toggle_qa_visibility(), get_available_estate_list(df_mobile_produksi_perawatan_input)], font=("Arial", 10), bg=SECONDARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
+    button_tanggal_qa_terakhir = make_button(scrollable_frame, text="Select Date", row=row, command=lambda: [get_date(entry_tanggal_qa_terakhir), toggle_qa_visibility(), get_available_estate_list(df_mobile_produksi_input)], font=("Arial", 10), bg=SECONDARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
     row += 1
 
     label_tanggal_kosong = make_label(parent=scrollable_frame, text="Tanggal Belum Dipilih", row=row, font=("Arial", 14, "bold"))
@@ -4811,7 +4811,7 @@ def qa_calculate_production():
     selected_estate = tk.StringVar(value=available_estate_list[0])
     combobox_estate, _ = make_combobox(scrollable_frame, values=available_estate_list, row=row, state="readonly", textvariable=selected_estate)
     row += 1
-    combobox_estate.bind("<<ComboboxSelected>>", lambda event: get_available_divisi_list(df_mobile_produksi_perawatan_input))
+    combobox_estate.bind("<<ComboboxSelected>>", lambda event: get_available_divisi_list(df_mobile_produksi_input))
 
     label_divisi = make_label(parent=scrollable_frame, text="Masukkan Nama Divisi:", row=row, font=("Arial", 12))
     row += 1
@@ -4819,7 +4819,7 @@ def qa_calculate_production():
     selected_divisi = tk.StringVar(value=available_divisi_list[0])
     combobox_divisi, _ = make_combobox(scrollable_frame, values=available_divisi_list, row=row, state="readonly", textvariable=selected_divisi)
     row += 1
-    combobox_divisi.bind("<<ComboboxSelected>>", lambda event: get_available_blok_list(df_mobile_produksi_perawatan_input))
+    combobox_divisi.bind("<<ComboboxSelected>>", lambda event: get_available_blok_list(df_mobile_produksi_input))
 
     label_blok = make_label(parent=scrollable_frame, text="Masukkan Nama Blok:", row=row, font=("Arial", 12))
     row += 1
@@ -4880,7 +4880,7 @@ def qa_calculate_production():
         entry_muatan_overload = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
         row += 1
 
-    process_calculation_production_button = make_button(scrollable_frame, text="Process", row=row, command = lambda: process_production_calculation(df_mobile_produksi_perawatan_input), font=("Arial", 10), bg=PRIMARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
+    process_calculation_production_button = make_button(scrollable_frame, text="Process", row=row, command = lambda: process_production_calculation(df_mobile_produksi_input), font=("Arial", 10), bg=PRIMARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
     row += 1
 
     tree = ttk.Treeview(scrollable_frame, columns=TABLE_COLUMNS, show="headings", height=12)
@@ -4997,7 +4997,7 @@ def qa_calculate_nursery():
     entry_tanggal_qa_terakhir = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
     row += 1
 
-    button_tanggal_qa_terakhir = make_button(scrollable_frame, text="Select Date", row=row, command=lambda: [get_date(entry_tanggal_qa_terakhir), toggle_qa_visibility(), get_available_estate_list(df_mobile_produksi_perawatan_input)], font=("Arial", 10), bg=SECONDARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
+    button_tanggal_qa_terakhir = make_button(scrollable_frame, text="Select Date", row=row, command=lambda: [get_date(entry_tanggal_qa_terakhir), toggle_qa_visibility(), get_available_estate_list(df_mobile_perawatan_input)], font=("Arial", 10), bg=SECONDARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
     row += 1
 
     label_tanggal_kosong = make_label(parent=scrollable_frame, text="Tanggal Belum Dipilih", row=row, font=("Arial", 14, "bold"))
@@ -5015,7 +5015,7 @@ def qa_calculate_nursery():
     selected_estate = tk.StringVar(value=available_estate_list[0])
     combobox_estate, _ = make_combobox(scrollable_frame, values=available_estate_list, row=row, state="readonly", textvariable=selected_estate)
     row += 1
-    combobox_estate.bind("<<ComboboxSelected>>", lambda event: get_available_divisi_list(df_mobile_produksi_perawatan_input))
+    combobox_estate.bind("<<ComboboxSelected>>", lambda event: get_available_divisi_list(df_mobile_perawatan_input))
 
     label_divisi = make_label(parent=scrollable_frame, text="Masukkan Nama Divisi:", row=row, font=("Arial", 12))
     row += 1
@@ -5023,7 +5023,7 @@ def qa_calculate_nursery():
     selected_divisi = tk.StringVar(value=available_divisi_list[0])
     combobox_divisi, _ = make_combobox(scrollable_frame, values=available_divisi_list, row=row, state="readonly", textvariable=selected_divisi)
     row += 1
-    combobox_divisi.bind("<<ComboboxSelected>>", lambda event: get_available_blok_list(df_mobile_produksi_perawatan_input))
+    combobox_divisi.bind("<<ComboboxSelected>>", lambda event: get_available_blok_list(df_mobile_perawatan_input))
 
     label_blok = make_label(parent=scrollable_frame, text="Masukkan Nama Blok:", row=row, font=("Arial", 12))
     row += 1
@@ -5142,7 +5142,7 @@ def qa_calculate_nursery():
     entry_keterangan_barn_owl = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
     row += 1
 
-    process_calculation_nursery_button = make_button(scrollable_frame, text="Process", row=row, command= lambda: process_nursery_calculation(df_mobile_produksi_perawatan_input), font=("Arial", 10), bg=PRIMARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
+    process_calculation_nursery_button = make_button(scrollable_frame, text="Process", row=row, command= lambda: process_nursery_calculation(df_mobile_perawatan_input), font=("Arial", 10), bg=PRIMARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
     row += 1
 
     tree = ttk.Treeview(scrollable_frame, columns=TABLE_COLUMNS, show="headings", height=12)
