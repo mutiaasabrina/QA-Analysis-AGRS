@@ -28,12 +28,14 @@ from reportlab.lib import colors
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
+import webbrowser
 
 # GUI Libraries
 import tkinter as tk
 from tkinter import ttk, messagebox, StringVar
 from tkcalendar import Calendar
 from PIL import Image, ImageTk
+import fitz
 
 # %% [markdown]
 #  ## 2. Utility Functions
@@ -321,17 +323,75 @@ def upload_photo_to_drive(file_path, note=""):
         # --- Upload to specified folder ---
         file_drive = drive.CreateFile({
             'title': filename,
-            'parents': [{'id': FOLDER_ID}]
+            'parents': [{'id': PHOTO_FOLDER_ID}]
         })
 
         file_drive.SetContentFile(file_path)
         file_drive.Upload()
 
-        print(f"Uploaded: {filename} to folder ID {FOLDER_ID}")
+        print(f"Uploaded: {filename} to folder ID {PHOTO_FOLDER_ID}")
 
     except Exception as e:
         messagebox.showerror("Error", f"Gagal upload foto: {e}")
         print(f"Error uploading to Google Drive: {e}")
+
+# %%
+def upload_pdf_to_drive(file_path, note=""):
+    try:
+        # --- Auth using service account ---
+        gauth = GoogleAuth()
+        gauth.auth_method = 'service'
+        gauth.credentials = ServiceAccountCredentials.from_json_keyfile_name(JSON_PATH, SCOPE)
+
+        drive = GoogleDrive(gauth)
+
+        # --- Generate filename with note ---
+        filename = file_path
+
+        # --- Upload to specified folder ---
+        file_drive = drive.CreateFile({
+            'title': filename,
+            'parents': [{'id': PDF_PROCESSED_FOLDER_ID}]
+        })
+
+        file_drive.SetContentFile(file_path)
+        file_drive.Upload()
+
+        print(f"Uploaded: {filename} to folder ID {PDF_PROCESSED_FOLDER_ID}")
+
+    except Exception as e:
+        messagebox.showerror("Error", f"Gagal upload pdf: {e}")
+        print(f"Error uploading to Google Drive: {e}")
+
+# %%
+def fetch_processed_pdfs(drive_folder_id):
+    try:
+        # --- Auth using service account ---
+        gauth = GoogleAuth()
+        gauth.auth_method = 'service'
+        gauth.credentials = ServiceAccountCredentials.from_json_keyfile_name(JSON_PATH, SCOPE)
+
+        drive = GoogleDrive(gauth)
+
+        # --- List files in the specified folder ---
+        file_list = drive.ListFile({'q': f"'{drive_folder_id}' in parents and trashed=false"}).GetList()
+
+        pdf_files = []
+        for file in file_list:
+            print(f"file: {file}")
+            if file['title'].lower().endswith('.pdf'):
+                pdf_files.append({
+                    'title': file['title'],
+                    'id': file['id'],
+                    'createdDate': file['createdDate'],
+                    'alternateLink': file['alternateLink']
+                })
+
+        print(f"Fetched {len(pdf_files)} PDF files from folder ID {drive_folder_id}")
+        return pdf_files
+
+    except Exception as e:
+        raise RuntimeError(f"Error fetching PDFs from Google Drive: {e}")
 
 # %%
 def save_to_sheet(worksheet, sheet_name, data_dict):
@@ -464,6 +524,73 @@ def process_uploaded_photos():
     if photos_data:
         messagebox.showinfo("Berhasil", "Foto berhasil diupload ke Google Drive.")
 
+# %%
+def process_uploaded_pdf():
+    global pdf_data
+    
+    for item in pdf_data:
+
+        if item:
+            print(f"Uploading {item}")
+            upload_pdf_to_drive(item)
+        else:
+            print("Skipping empty file entry")
+
+    if pdf_data:
+        messagebox.showinfo("Berhasil", "PDF berhasil diupload ke Google Drive.")
+
+# %%
+def open_pdf(pdf_url):
+    # Fungsi untuk membuka PDF dari Google Drive menggunakan web browser
+    webbrowser.open(pdf_url)
+
+# %%
+def display_pdf(event, pdf_files, group_title=""):
+    # Mendapatkan item yang dipilih di Treeview
+
+    if group_title == "Processed":
+        selected_item = processed_table.selection()
+        if selected_item:
+            item_id = selected_item[0]
+            # Ambil data PDF berdasarkan item yang dipilih
+            pdf_title = processed_table.item(item_id, "values")[0]
+            
+            # Mencari file PDF yang sesuai dengan title yang dipilih
+            selected_pdf = next(item for item in pdf_files if item["title"] == pdf_title)
+            pdf_url = selected_pdf["alternateLink"]
+
+            # Menampilkan PDF di bawah tabel
+            pdf_display_area.config(text=f"Previewing: {group_title} - {pdf_title}")
+            open_pdf(pdf_url)
+    elif group_title == "Rejected":
+        selected_item = rejected_table.selection()
+        if selected_item:
+            item_id = selected_item[0]
+            # Ambil data PDF berdasarkan item yang dipilih
+            pdf_title = rejected_table.item(item_id, "values")[0]
+            
+            # Mencari file PDF yang sesuai dengan title yang dipilih
+            selected_pdf = next(item for item in pdf_files if item["title"] == pdf_title)
+            pdf_url = selected_pdf["alternateLink"]
+
+            # Menampilkan PDF di bawah tabel
+            pdf_display_area.config(text=f"Previewing: {group_title} - {pdf_title}")
+            open_pdf(pdf_url)
+    elif group_title == "Approved":
+        selected_item = approved_table.selection()
+        if selected_item:
+            item_id = selected_item[0]
+            # Ambil data PDF berdasarkan item yang dipilih
+            pdf_title = approved_table.item(item_id, "values")[0]
+            
+            # Mencari file PDF yang sesuai dengan title yang dipilih
+            selected_pdf = next(item for item in pdf_files if item["title"] == pdf_title)
+            pdf_url = selected_pdf["alternateLink"]
+
+            # Menampilkan PDF di bawah tabel
+            pdf_display_area.config(text=f"Previewing: {group_title} - {pdf_title}")
+            open_pdf(pdf_url)
+
 # %% [markdown]
 #  ## 3. Configuration and Constants
 
@@ -475,8 +602,13 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/1I0dkJq30JSM-sUaGUhd0eZiAdeu
 SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 SPLASH_IMAGE = resource_path('bgqa.png')
 PANCARAN_LOGO = resource_path("Logo_Pancaran_Agro-removebg-preview.ico")
-COMPANY_LOGO = resource_path("TDK.ico")
-FOLDER_ID = "1_OgkeR2Iooh9dyoIC6gskIYnJnt8qyJ6"
+COMPANY_LOGO = resource_path("Logo_TDK.png")
+PHOTO_FOLDER_ID = "1_OgkeR2Iooh9dyoIC6gskIYnJnt8qyJ6"
+PDF_REJECTED_FOLDER_ID = "1GqFyobGO6UfFYHy4pqCNuQfX21DtU4RC"
+PDF_APPROVED_FOLDER_ID = "1C36T73QJxDNMJsZJR_WsHgv4GlPp-60o"
+PDF_PROCESSED_FOLDER_ID = "1ksjnPFekcrxb4-6NNr7bdyNBMzHTqtfT"
+APPROVED_LOGO = resource_path("Approved.png")
+DONE_LOGO = resource_path("Done.png")
 
 # --- Sheets ---
 SHEET_NAMES_INPUT = ["Input - Production", "Input - Nursery", "Input - Chemist", "Input - Fertilizer"]
@@ -487,6 +619,7 @@ ESTATE_OPTIONS = ["Inti", "Plasma"]
 DAY_IN_MONTH = 30
 DATABASE_IDENTIFIER = ["Blok", "Panen Rotasi", "Tanggal Periksa", "Divisi", "Estate", "DivisiLabel", "Total", "Jenis Pupuk", "Dosis / Pokok", "Tanggal Pemupukan", "Jenis Chemist", "Dosis / Knapsack", "Tanggal Semprot"]
 TABLE_COLUMNS = ("Parameter", "Score", "Nilai", "Keterangan")
+PDF_TABLE_COLUMNS = ("Title", "Date Modified")
 
 # Production
 BRONDOLAN_TINGGAL_OPTIONS = [
@@ -791,6 +924,7 @@ FERTILIZER_TYPE = ["NPK 13", "NPK 15", "NPK 12", "Dolomite", "Urea", "MOP", "HGF
 CURRENT_TIMEZONE = pytz.timezone('Asia/Jakarta')
 
 photos_data = []  # list of {"path": ..., "note": ..., "widgets": ...}
+pdf_data = []
 
 # %% [markdown]
 #  ## 4. Global Variables (Application State)
@@ -1844,7 +1978,7 @@ def hide_all_widgets():
 
 # %%
 def create_main_widgets():
-    global label_username, entry_username, previous_menu, current_menu, back_button, exit_button, label_menu_qa, combobox_menu_qa, label_menu_data_overview, combobox_menu_data_overview, label_chosen_year, combobox_chosen_year, label_note_year, button_goto_chosen_qa_menu, button_goto_chosen_analytic_menu, button_analisa_pemupukan, username_var, label_saved_username, username, df # Add df
+    global label_username, entry_username, previous_menu, current_menu, back_button, exit_button, label_menu_qa, combobox_menu_qa, label_menu_data_overview, combobox_menu_data_overview, label_chosen_year, combobox_chosen_year, label_note_year, button_goto_chosen_qa_menu, button_goto_processed_pdf, button_goto_chosen_analytic_menu, button_analisa_pemupukan, username_var, label_saved_username, username, df # Add df
 
     if not root_exists: return
     root.geometry("500x400")
@@ -1860,7 +1994,7 @@ def create_main_widgets():
     # --- Username Section ---
     row_offset = 0 
     if not username:
-        label_username = make_label(parent=root, text="Masukkan Username:", row=row_offset)
+        label_username = make_label(parent=root, text="Masukkan Username:", row=row_offset, font=("Arial", 12, "bold"))
         row_offset += 1
         entry_username = make_entry(parent=root, row=row_offset, textvariable=username_var)
         row_offset += 1
@@ -1895,6 +2029,13 @@ def create_main_widgets():
 
     # --- Buttons ---
     button_goto_chosen_qa_menu = make_button(root, text="Submit Menu", row=row_offset, command=goto_chosen_qa_menu, font=("Arial", 12))
+    row_offset += 1
+
+    # --- PDFs ---
+    label_goto_processed_pdf_title = make_label(parent=root, text="Processed PDF", row=row_offset, font=("Arial", 14, "bold"))
+    row_offset += 1
+
+    button_goto_processed_pdf = make_button(root, text="PDF List", row=row_offset, command=goto_processed_pdf, font=("Arial", 12))
     row_offset += 1
 
     # --- Data Overview Section ---
@@ -2047,10 +2188,10 @@ def convert_berondolan_tertinggal_tph_to_score(berondolan_tertinggal_tph):
 
 # %%
 def submit_production_analysis():
-    global df_mobile_produksi_input, entry_tanggal_qa_terakhir, selected_estate, selected_divisi, selected_blok, available_blok_list, \
-        tph_counter
+    global df_mobile_produksi_input, entry_tanggal_qa_terakhir, selected_estate, selected_divisi, selected_blok, entry_mandor, available_blok_list, tph_counter, label_chosen_year, combobox_chosen_year, diperiksa, mandor, pokok_sample, sph, setara_ha, berondolan_tinggal_sph, buah_tinggal_sph,  buah_busuk_sph
 
     try:
+        sph = cek_entry_number("sph", entry_sph, 0.0)
         actual = cek_entry_number("entry", entry_actual, 0.0)
         budget = cek_entry_number("budget", entry_budget, 0.0)
         restan = cek_entry_number("restan", entry_restant, 0.0)
@@ -2063,18 +2204,18 @@ def submit_production_analysis():
         messagebox.showerror("Error", str(e))
         return
 
-    # Ambil nilai input
     tanggal_str = entry_tanggal_qa_terakhir.get().strip()
     estate = selected_estate.get() if selected_estate else ""
     divisi = selected_divisi.get() if selected_divisi else ""
     blok = selected_blok.get() if selected_blok else ""
+    mandor = entry_mandor.get().strip()
 
-    # Validasi input kosong/None
     if not validate_required_fields({
         "Tanggal": tanggal_str,
         "Estate": estate,
         "Divisi": divisi,
-        "Blok": blok
+        "Blok": blok,
+        "Mandor": mandor
     }):
         return
 
@@ -2082,6 +2223,13 @@ def submit_production_analysis():
         tanggal_dt = datetime.datetime.strptime(tanggal_str, "%Y-%m-%d").date()
     except Exception:
         messagebox.showerror("Error", "Format tanggal tidak valid.")
+        return
+
+    # 🔹 Ambil tahun QA dari combobox
+    try:
+        chosen_year = int(combobox_chosen_year.get())
+    except ValueError:
+        messagebox.showerror("Error", "Tahun QA belum dipilih atau tidak valid.")
         return
 
     try:
@@ -2100,15 +2248,15 @@ def submit_production_analysis():
         messagebox.showerror("Error", "Data tidak ditemukan untuk kombinasi input tersebut.")
         return
 
-    # Remove the processed blok
     if blok in available_blok_list:
         available_blok_list.remove(blok)
         update_blok_combobox()
 
-    # Get the values from the filtered DataFrame
+    diperiksa = filtered_df["Nama Petugas"].iloc[0]
     estate = filtered_df["Kebun"].iloc[0]
     divisi = filtered_df["Divisi"].iloc[0]
     pokok_sample = float(filtered_df["Jumlah Pokok"].sum())
+    setara_ha = pokok_sample/sph
     pokok_dipanen = float(filtered_df["Pkk Dipanen"].sum())
     pokok_panen = float(filtered_df["Pkk Dipanen"].sum())
     buah_panen = float(filtered_df["Buah Dipanen"].sum())
@@ -2119,19 +2267,22 @@ def submit_production_analysis():
     buah_tertinggal_tph = float(filtered_df["Buah Tinggal (TPH)"].sum())
     tph_counter = float(filtered_df["TPH Counter"].sum())
     panen_rotasi = filtered_df["Rotasi"].iloc[0]
-    
-    # Compose a new dictionary for the input
-    # Identifier info
+
+    # Hitung keterangan SPH
+    berondolan_tinggal_sph = berondolan_tertinggal/setara_ha
+    buah_tinggal_sph = buah_tertinggal/setara_ha
+    buah_busuk_sph = tbs_busuk_tertinggal/setara_ha
+
     identifier_data = {
         "Blok": blok,
         "Panen Rotasi": panen_rotasi,
         "Tanggal Periksa": tanggal_str,
-        "DivisiLabel": f"{estate}-{divisi}", 
+        "DivisiLabel": f"{estate}-{divisi}",
         "Divisi": divisi,
         "Estate": estate,
     }
 
-    # Actual data
+    # 🔹 Data QA lengkap (versi 2025 ke atas)
     actual_data = {
         "Jumlah Pokok Sample": pokok_sample,
         "Jumlah Pokok Panen": pokok_panen,
@@ -2152,9 +2303,14 @@ def submit_production_analysis():
         "Muatan Overload": muatan_overload,
     }
 
+    # 🔹 Filter otomatis berdasarkan tahun QA
+    if chosen_year < 2025:
+        keys_until_tbs_busuk = list(actual_data.keys())[:12]  # ambil sampai “Kualitas Panen -TBS Busuk Tinggal”
+        actual_data = {k: actual_data[k] for k in keys_until_tbs_busuk}
+
     input_data = {**identifier_data, **actual_data}
-    
-    # Analyze the input values 
+
+    # 🔹 Proses analisis QA
     final_qa_score, final_qa_nilai, converted_input = analyse_qa_production(
         identifier_data,
         pokok_sample,
@@ -2182,12 +2338,16 @@ def submit_production_analysis():
     save_to_sheet(input_production, "Input - Production", input_data)
     save_to_sheet(output_production, "Output - Production", final_qa_score)
     save_to_sheet(output_weight_production, "Output (Weight) - Production", final_qa_nilai)
-
-    # Compose PDF report
+    
+    # Generate PDF hasil sesuai tahun QA
     generate_pdf_output(final_qa_score, final_qa_nilai, combobox_menu_qa.get(), input_data)
+
+    # Upload PDF to Google Drive
+    process_uploaded_pdf()
 
     # Clear cached photos data
     photos_data.clear()
+    pdf_data.clear()
 
     # Display success window and go back to main menu
     show_success_window()
@@ -2267,7 +2427,7 @@ def convert_barn_owl_to_score(barn_owl):
 
 # %%
 def submit_nursery_analysis(): 
-    global df_mobile_perawatan_input, entry_tanggal_qa_terakhir, selected_estate, selected_divisi, selected_blok, available_blok_list
+    global df_mobile_perawatan_input, entry_tanggal_qa_terakhir, selected_estate, selected_divisi, selected_blok, entry_mandor, available_blok_list, diperiksa, mandor, pokok_sample
 
     try:
         cover_crop = cek_entry_number("cover crop", entry_cover_crop, 0.0)
@@ -2281,13 +2441,15 @@ def submit_nursery_analysis():
     estate = selected_estate.get() if selected_estate else ""
     divisi = selected_divisi.get() if selected_divisi else ""
     blok = selected_blok.get() if selected_blok else ""
+    mandor = entry_mandor.get().strip()
 
     # Validasi input kosong/None
     if not validate_required_fields({
         "Tanggal": tanggal_str,
         "Estate": estate,
         "Divisi": divisi,
-        "Blok": blok
+        "Blok": blok,
+        "Mandor": mandor
     }):
         return
 
@@ -2319,6 +2481,7 @@ def submit_nursery_analysis():
         update_blok_combobox()
 
     # Get the values from the filtered DataFrame
+    diperiksa = filtered_df["Nama Petugas"].iloc[0]
     estate = filtered_df["Kebun"].iloc[0]
     divisi = filtered_df["Divisi"].iloc[0]
     pokok_sample = filtered_df["Jumlah Pokok"].sum()
@@ -2457,8 +2620,12 @@ def submit_nursery_analysis():
     # Compose PDF report
     generate_pdf_output(final_qa_score, final_qa_nilai, combobox_menu_qa.get(), converted_input)
 
+    # Upload PDF to Google Drive
+    process_uploaded_pdf()
+
     # Clear cached photos data
     photos_data.clear()
+    pdf_data.clear()
 
     # Display success window and go back to main menu
     show_success_window()
@@ -2594,7 +2761,7 @@ def convert_pengembalian_karung_to_score(pengembalian_karung):
 
 # %%
 def submit_fertilizer_analysis(): 
-    global df_mobile_pemupukan_input, entry_tanggal_qa_terakhir, selected_estate, selected_divisi, selected_blok, available_blok_list
+    global df_mobile_pemupukan_input, entry_tanggal_qa_terakhir, selected_estate, selected_divisi, selected_blok, entry_mandor, available_blok_list, diperiksa, mandor, pokok_sample
 
     try:
         pemeriksaan_ancak = check_combobox("pemeriksaan ancak pemupukan", combobox_pemeriksaan_ancak, PEMERIKSAAN_ANCAK_PEMUPUKAN_OPTIONS, PEMERIKSAAN_ANCAK_PEMUPUKAN_OPTIONS[-1])
@@ -2612,13 +2779,15 @@ def submit_fertilizer_analysis():
     estate = selected_estate.get() if selected_estate else ""
     divisi = selected_divisi.get() if selected_divisi else ""
     blok = selected_blok.get() if selected_blok else ""
+    mandor = entry_mandor.get().strip()
 
     # Validasi input kosong/None
     if not validate_required_fields({
         "Tanggal": tanggal_str,
         "Estate": estate,
         "Divisi": divisi,
-        "Blok": blok
+        "Blok": blok,
+        "Mandor": mandor
     }):
         return
 
@@ -2650,6 +2819,7 @@ def submit_fertilizer_analysis():
         update_blok_combobox()
 
     # Get the values from the filtered DataFrame
+    diperiksa = filtered_df["Nama Petugas"].iloc[0]
     jenis_pupuk = filtered_df["Jenis Pupuk"].iloc[0]
     dosis_pokok = filtered_df["Dosis"].iloc[0]
     tanggal_pemupukan = filtered_df["Tanggal Pemupukan"].iloc[0]
@@ -2797,8 +2967,12 @@ def submit_fertilizer_analysis():
     # Compose PDF report
     generate_pdf_output(final_qa_score, final_qa_nilai, combobox_menu_qa.get(), converted_input)
 
+    # Upload PDF to Google Drive
+    process_uploaded_pdf()
+
     # Clear cached photos data
     photos_data.clear()
+    pdf_data.clear()
 
     # Display success window and go back to main menu
     show_success_window()
@@ -2920,7 +3094,7 @@ def convert_peletakan_alat_semprot_to_score(peletakan_alat_semprot):
 
 # %%
 def submit_chemist_analysis(): 
-    global df_mobile_chemist_input, entry_tanggal_qa_terakhir, selected_estate, selected_divisi, selected_blok, available_blok_list
+    global df_mobile_chemist_input, entry_tanggal_qa_terakhir, selected_estate, selected_divisi, selected_blok, entry_mandor, available_blok_list, diperiksa, mandor, pokok_sample
 
     try:
         kotak_p3k = check_combobox("kotak P3K", combobox_p3k, KOTAK_P3K_OPTIONS, KOTAK_P3K_OPTIONS[-1])
@@ -2934,13 +3108,15 @@ def submit_chemist_analysis():
     estate = selected_estate.get() if selected_estate else ""
     divisi = selected_divisi.get() if selected_divisi else ""
     blok = selected_blok.get() if selected_blok else ""
+    mandor = entry_mandor.get().strip()
     
     # Validasi input kosong/None
     if not validate_required_fields({
         "Tanggal": tanggal_str,
         "Estate": estate,
         "Divisi": divisi,
-        "Blok": blok
+        "Blok": blok,
+        "Mandor": mandor
     }):
         return
 
@@ -2972,6 +3148,7 @@ def submit_chemist_analysis():
         update_blok_combobox()
 
     # Get the values from the filtered DataFrame
+    diperiksa = filtered_df["Nama Petugas"].iloc[0]
     tanggal_semprot = filtered_df["Tanggal Semprot"].iloc[0]
     dosis_knapsack = filtered_df["Dosis Knapsack"].iloc[0]
     luas = filtered_df["Luas"].sum()
@@ -3142,8 +3319,12 @@ def submit_chemist_analysis():
     print(f"Final QA Nilai: {final_qa_nilai}")
     generate_pdf_output(final_qa_score, final_qa_nilai, combobox_menu_qa.get(), converted_input)
 
+    # Upload PDF to Google Drive
+    process_uploaded_pdf()
+
     # Clear cached photos data
     photos_data.clear()
+    pdf_data.clear()
 
     # Display success window and go back to main menu
     show_success_window()
@@ -3251,7 +3432,7 @@ def go_to_reanalyze():
 
 # %%
 def goto_chosen_qa_menu():
-    global previous_menu, \
+    global username, previous_menu, \
         df_mobile_produksi_input, df_mobile_perawatan_input, df_mobile_pemupukan_input, df_mobile_chemist_input, df_input, df_output, df_output_weight, \
         available_estate_list, available_divisi_list, available_blok_list
 
@@ -3310,6 +3491,47 @@ def goto_chosen_qa_menu():
         qa_calculate_fertilizer()
     elif menu_qa == "QA Chemist":
         qa_calculate_chemist()
+
+# %%
+def goto_processed_pdf():
+    global username, previous_menu, \
+        df_mobile_produksi_input, df_mobile_perawatan_input, df_mobile_pemupukan_input, df_mobile_chemist_input, df_input, df_output, df_output_weight, \
+        available_estate_list, available_divisi_list, available_blok_list
+
+    if not root_exists: return
+
+    # --- ROW & COLUMN CONFIGURATION RESET ---
+    for i in range(20): # Reset rows
+        root.rowconfigure(i, weight=0)
+    root.columnconfigure(0, weight=1) # Configure columns needed by THIS screen
+    root.columnconfigure(1, weight=0) # Reset unused columns
+    # --- END CONFIGURATION ---
+
+    # 1. Check username
+    username = entry_username.get()
+    if not username.strip():
+        messagebox.showerror("Error", "Tolong masukkan username.")
+        return
+    
+    # 2. Hide all widget and set previous menu flag to main menu
+    previous_menu = "main"
+    hide_all_widgets()
+
+    # 3. Read all the processed PDF files from google drive
+    try:
+        processed_pdf_files = fetch_processed_pdfs(PDF_PROCESSED_FOLDER_ID)
+        rejected_pdf_files = fetch_processed_pdfs(PDF_REJECTED_FOLDER_ID)
+        approved_pdf_files = fetch_processed_pdfs(PDF_APPROVED_FOLDER_ID)
+        
+    except Exception as e:
+        messagebox.showerror("Error", f"Gagal memuat data PDF: {e}")
+        print(f"Gagal memuat data PDF: {e}")
+        go_back()
+        return
+    
+    # 4. Show the processed PDF files with table
+    processed_pdfs(processed_pdf_files, rejected_pdf_files, approved_pdf_files)
+    
 
 # %%
 def plot_bar_chart(data):
@@ -3655,7 +3877,7 @@ def goto_chosen_data_overview_menu():
 
 # %%
 def generate_pdf_output(final_qa_scores, final_qa_nilai, combobox_menu_qa, input_data):
-    global uploaded_photo_path, \
+    global uploaded_photo_path, pdf_path, \
         entry_keterangan_cpt, entry_keterangan_gawangan, entry_keterangan_titi_panen, \
         entry_keterangan_jalan_jembatan, entry_keterangan_hama_penyakit, entry_keterangan_beneficial_plan, \
         entry_keterangan_peilscale, entry_keterangan_cover_crop, entry_keterangan_barn_owl, \
@@ -3669,9 +3891,10 @@ def generate_pdf_output(final_qa_scores, final_qa_nilai, combobox_menu_qa, input
         entry_keterangan_pengendalian_gulma, entry_keterangan_penggunaan_hk, entry_keterangan_apd_pekerja, \
         entry_keterangan_p3k, entry_keterangan_kartu_pengambilan_pencampuran_bahan, \
         entry_keterangan_kalibrasi_alat_nozel, entry_keterangan_alat_ukur_perkakas_perbaikan, entry_keterangan_peletakan_alat_semprot, \
-        photos_data
-
-    pdf_path = f"hasil_analisa_{combobox_menu_qa}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        photos_data, sph, setara_ha, berondolan_tinggal_sph, buah_tinggal_sph,  buah_busuk_sph
+    
+    menu_qa = combobox_menu_qa.replace(" ", "_")
+    pdf_path = f"hasil_analisa_{menu_qa}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     c = canvas.Canvas(pdf_path, pagesize=A4)
     width, height = A4
     margin = 50
@@ -3717,6 +3940,12 @@ def generate_pdf_output(final_qa_scores, final_qa_nilai, combobox_menu_qa, input
     if "Produksi" in combobox_menu_qa:
         meta_y -= 15
         c.drawString(left_x, meta_y, f"Panen Rotasi  : {final_qa_scores.get('Panen Rotasi', '')}")
+        c.drawString(right_x, meta_y, f"SPH  : {sph}")
+        meta_y -= 15
+        c.drawString(left_x, meta_y, f"Pokok Sample  : {pokok_sample}")
+    elif "Perawatan" in combobox_menu_qa:
+        meta_y -= 15
+        c.drawString(left_x, meta_y, f"Pokok Sample  : {pokok_sample}")
     elif "Pemupukan" in combobox_menu_qa:
         meta_y -= 15
         c.drawString(left_x, meta_y, f"Jenis Pupuk  : {final_qa_scores.get('Jenis Pupuk', '')}")
@@ -3734,7 +3963,7 @@ def generate_pdf_output(final_qa_scores, final_qa_nilai, combobox_menu_qa, input
     meta_y -= 30
     y = meta_y
     col1_x = margin                    # Deskripsi Penilaian
-    col2_x = col1_x + 280              # Score
+    col2_x = col1_x + 200              # Score
     col3_x = col2_x + 55               # Nilai
     col4_x = col3_x + 55               # Keterangan
 
@@ -3748,12 +3977,16 @@ def generate_pdf_output(final_qa_scores, final_qa_nilai, combobox_menu_qa, input
     # --- Table Content ---
     y -= 20
     c.setFont("Helvetica", 10)
+
     for key in final_qa_scores:
         if key in DATABASE_IDENTIFIER:
             continue
 
         score = final_qa_scores.get(key, "")
         nilai = final_qa_nilai.get(key, "")
+
+        if(nilai == "" or nilai == 0):
+            continue
 
         # --- Draw Description (black) ---
         c.setFillColor(colors.black)
@@ -3815,9 +4048,9 @@ def generate_pdf_output(final_qa_scores, final_qa_nilai, combobox_menu_qa, input
             if key == "Pencapaian Produksi":
                 keterangan = f"{(input_data["Actual"] / input_data["Budget"]) * 100:.2f}% trhdp Bgd"
             elif key == "Kualitas Panen - TBS Tertinggal":
-                keterangan = f"{perhitungan_buah_tinggal:.2f}% buah tinggal"
+                keterangan = f"{perhitungan_buah_tinggal:.2f}% buah tinggal, {buah_tinggal_sph:.2f} jjg/Ha"
             elif key ==  "Kualitas Panen - LF Tertinggal":
-                keterangan = f"{perhitungan_berondolan_tertinggal:.2f} butir/pokok"
+                keterangan = f"{perhitungan_berondolan_tertinggal:.2f} butir/pokok, {berondolan_tinggal_sph:.2f} butir/Ha"
             elif key == "Kualitas Transport - Jjg di TPH":
                 keterangan = f"{perhitungan_buah_tertinggal_tph:.2f} Jjg/TPH (Sample {tph_counter} TPH)"
             elif key == "Kualitas Transport - LF di TPH":
@@ -3825,7 +4058,7 @@ def generate_pdf_output(final_qa_scores, final_qa_nilai, combobox_menu_qa, input
             elif key == "Rotasi Panen":
                 keterangan = f"{(DAY_IN_MONTH/input_data["Rotasi Panen"]):.2f} (Pusingan {input_data["Rotasi Panen"]} hari)"
             elif key == "Kualitas Panen - TBS Busuk Tinggal":
-                keterangan = f"{perhitungan_tbs_busuk_tinggal:.2f}% buah busuk tinggal"
+                keterangan = f"{perhitungan_tbs_busuk_tinggal:.2f}% buah busuk tinggal, {buah_busuk_sph:.2f} jjg/Ha"
             else:
                 keterangan = ""
 
@@ -3945,19 +4178,55 @@ def generate_pdf_output(final_qa_scores, final_qa_nilai, combobox_menu_qa, input
 
     # Titles
     c.setFont("Helvetica-Bold", 10)
-    titles = ["Diperiksa", "Disaksikan", "Disetujui", "Diketahui"]
+    titles = ["Diperiksa", "Disaksikan", "Diverifikasi", "Diketahui"]
     for i, title in enumerate(titles):
         c.drawCentredString(x_start + col_width * (i + 0.5), y + row_height + 10, title)
 
-    # Empty signature boxes
+    # Empty signature boxes (with optional logos)
+    # For the first three roles (Petugas QA, Mdr 1 / Mdr Panen, Asisten) draw DONE_LOGO if available.
+    # For the Manager slot draw APPROVED_LOGO only when the current entry username == "Didik Wahyu Prasetyo".
     for i in range(4):
-        c.rect(x_start + col_width * i, y, col_width, row_height)
+        box_x = x_start + col_width * i
+        box_y = y
+        c.rect(box_x, box_y, col_width, row_height)
 
-    # Roles
+        # Choose logo for this slot
+        logo_path = None
+        try:
+            if i in (0, 1, 2):
+                # first three roles get DONE_LOGO if the file exists
+                if 'DONE_LOGO' in globals() and DONE_LOGO and os.path.exists(DONE_LOGO):
+                    logo_path = DONE_LOGO
+            # else:
+            #     # Manager slot: only show APPROVED_LOGO when username matches
+            #     if 'username' in locals() and username == "Didik Wahyu Prasetyo":
+            #         if 'APPROVED_LOGO' in globals() and APPROVED_LOGO and os.path.exists(APPROVED_LOGO):
+            #             logo_path = APPROVED_LOGO
+        except Exception as e:
+            print(f"Logo existence check error: {e}")
+
+        if logo_path:
+            try:
+                img = ImageReader(logo_path)
+                padding = 6
+                img_w = col_width - padding * 2
+                img_h = row_height - padding * 2
+                # Draw image inside the box with preserved aspect ratio
+                c.drawImage(img, box_x + padding, box_y + padding, width=img_w, height=img_h, preserveAspectRatio=True, mask='auto')
+            except Exception as e:
+                print(f"Failed to draw signature image in box {i}: {e}")
+
+    # Roles (titles under boxes)
     c.setFont("Helvetica", 10)
-    roles = ["Petugas QA", "Mdr 1 / Mdr Panen", "Asisten", "Manager"]
-    for i, role in enumerate(roles):
-        c.drawCentredString(x_start + col_width * (i + 0.5), y - 15, role)
+    titles = ["Petugas QA", "Mdr 1 / Mdr Panen", "Asisten", "Manager"]
+    for i, title in enumerate(titles):
+        c.drawCentredString(x_start + col_width * (i + 0.5), y - 15, title)
+
+    # Persons (names under the role labels)
+    c.setFont("Helvetica", 10)
+    persons = [diperiksa, mandor, username, "Didik Wahyu Prasetyo"]
+    for i, person in enumerate(persons):
+        c.drawCentredString(x_start + col_width * (i + 0.5), y - 25, person)
 
     # --- Optional Image ---
     if uploaded_photo_path and os.path.exists(uploaded_photo_path):
@@ -4022,6 +4291,7 @@ def generate_pdf_output(final_qa_scores, final_qa_nilai, combobox_menu_qa, input
     messagebox.showinfo("Berhasil", f"PDF berhasil dibuat:\n{pdf_path}")
     os.startfile(pdf_path)
 
+    pdf_data.append(pdf_path)
 
 # %%
 def toggle_qa_visibility(*args):
@@ -4052,12 +4322,13 @@ def toggle_qa_visibility(*args):
 
 # %%
 def process_production_calculation(df_mobile_input):
-    global tree, tph_counter
+    global tree, tph_counter, diperiksa, pokok_sample
     if not is_widget_alive(tree):
         messagebox.showerror("Error", "Tabel hasil tidak tersedia.")
         return
     
     try:
+        sph = cek_entry_number("sph", entry_sph, 0.0)
         actual = cek_entry_number("entry", entry_actual, 0.0)
         budget = cek_entry_number("budget", entry_budget, 0.0)
         restan = cek_entry_number("restan", entry_restant, 0.0)
@@ -4107,7 +4378,9 @@ def process_production_calculation(df_mobile_input):
         messagebox.showerror("Error", "Data tidak ditemukan untuk kombinasi input tersebut.")
         return
         
+    diperiksa = filtered_df["Nama Petugas"].iloc[0]
     pokok_sample = filtered_df["Jumlah Pokok"].sum()
+    setara_ha = pokok_sample/sph
     pokok_dipanen = filtered_df["Pkk Dipanen"].sum()
     berondolan_tertinggal = filtered_df["LF Tinggal"].sum()
     buah_tertinggal = filtered_df["Buah Matang Tidak Dipanen"].sum() + filtered_df["Buah Tinggal (pr, pk, pp, lp)"].sum()
@@ -4139,6 +4412,11 @@ def process_production_calculation(df_mobile_input):
     year = combobox_chosen_year.get()
     weights = extract_weights_by_year(YEARLY_WEIGHT_PRODUCTION, year)
 
+    # Hitung Keterangan SPH
+    berondolan_tinggal_sph = berondolan_tertinggal/setara_ha
+    buah_tinggal_sph = buah_tertinggal/setara_ha
+    buah_busuk_sph = tbs_busuk_tertinggal/setara_ha
+
     for key, score in score_dict.items():
         weight = float(weights.get(key, "0%").replace("%", "")) / 100
         nilai = score * weight
@@ -4146,9 +4424,9 @@ def process_production_calculation(df_mobile_input):
         if key == "Pencapaian Produksi":
             ket = f"{(actual/budget)*100:.2f}% trhdp Bgd"
         elif key == "Kualitas Panen - TBS Tertinggal":
-            ket = f"{perhitungan_buah_tinggal:.2f}% buah tinggal"
+            ket = f"{perhitungan_buah_tinggal:.2f}% buah tinggal, {buah_tinggal_sph:.2f} jjg/Ha"
         elif key ==  "Kualitas Panen - LF Tertinggal":
-            ket = f"{perhitungan_berondolan_tertinggal:.2f} butir/pokok"
+            ket = f"{perhitungan_berondolan_tertinggal:.2f} butir/pokok, {berondolan_tinggal_sph:.2f} butir/Ha"
         elif key == "Kualitas Transport - Jjg di TPH":
             ket = f"{perhitungan_buah_tertinggal_tph:.2f} Jjg/TPH (Sample {tph_counter} TPH)"
         elif key == "Kualitas Transport - LF di TPH":
@@ -4156,7 +4434,7 @@ def process_production_calculation(df_mobile_input):
         elif key == "Rotasi Panen":
             ket = f"{(DAY_IN_MONTH/panen_rotasi):.2f} (Pusingan {panen_rotasi} hari)"
         elif key == "Kualitas Panen - TBS Busuk Tinggal":
-            ket = f"{perhitungan_tbs_busuk_tinggal:.2f}% buah busuk tinggal"
+            ket = f"{perhitungan_tbs_busuk_tinggal:.2f}% buah busuk tinggal, {buah_busuk_sph:.2f} jjg/Ha"
         else:
             ket = ""
 
@@ -4167,14 +4445,15 @@ def process_production_calculation(df_mobile_input):
         tree.delete(i)
     total_nilai = 0
     for item in table:
-        tree.insert("", "end", values=(item["Parameter"], item["Score"], item["Nilai"], item["Keterangan"]))
-        total_nilai += item["Nilai"]
+        if item["Nilai"] != 0:
+            tree.insert("", "end", values=(item["Parameter"], item["Score"], item["Nilai"], item["Keterangan"]))
+            total_nilai += item["Nilai"]
     tree.insert("", "end", values=("TOTAL", "", round(total_nilai, 2), ""), tags=("total",))
     tree.tag_configure("total", background="#e0e0e0", font=("Arial", 10, "bold"))
 
 # %%
 def process_nursery_calculation(df_mobile_input):
-    global tree
+    global tree, diperiksa, pokok_sample
     if not is_widget_alive(tree):
         messagebox.showerror("Error", "Tabel hasil tidak tersedia.")
         return
@@ -4232,7 +4511,7 @@ def process_nursery_calculation(df_mobile_input):
         messagebox.showerror("Error", "Data tidak ditemukan untuk kombinasi input tersebut.")
         return    
     
-    print(filtered_df.columns)
+    diperiksa = filtered_df["Nama Petugas"].iloc[0]
     pokok_sample = filtered_df["Jumlah Pokok"].sum()
     beneficial_plant = filtered_df["Beneficial Plant"].iloc[0]
     peilscale = filtered_df["Peilscale"].iloc[0]
@@ -4325,14 +4604,15 @@ def process_nursery_calculation(df_mobile_input):
         tree.delete(i)
     total_nilai = 0
     for item in table:
-        tree.insert("", "end", values=(item["Parameter"], item["Score"], item["Nilai"], item["Keterangan"]))
-        total_nilai += item["Nilai"]
+        if item["Nilai"] != 0:
+            tree.insert("", "end", values=(item["Parameter"], item["Score"], item["Nilai"], item["Keterangan"]))
+            total_nilai += item["Nilai"]
     tree.insert("", "end", values=("TOTAL", "", round(total_nilai, 2), ""), tags=("total",))
     tree.tag_configure("total", background="#e0e0e0", font=("Arial", 10, "bold"))
 
 # %%
 def process_fertilizer_calculation(df_mobile_input):
-    global tree
+    global tree, diperiksa, pokok_sample
     if not is_widget_alive(tree):
         messagebox.showerror("Error", "Tabel hasil tidak tersedia.")
         return
@@ -4399,7 +4679,7 @@ def process_fertilizer_calculation(df_mobile_input):
         messagebox.showerror("Error", "Data tidak ditemukan untuk kombinasi input tersebut.")
         return    
     
-    print(filtered_df.columns)
+    diperiksa = filtered_df["Nama Petugas"].iloc[0]
     pokok_sample = filtered_df["Jumlah Pokok"].sum()
     pokok_tidak_terpupuk = filtered_df["Pokok Tidak Terpupuk"].sum()
     kondisi_gawangan_baik = filtered_df["Gawangan Baik"].sum()
@@ -4507,14 +4787,15 @@ def process_fertilizer_calculation(df_mobile_input):
         tree.delete(i)
     total_nilai = 0
     for item in table:
-        tree.insert("", "end", values=(item["Parameter"], item["Score"], item["Nilai"], item["Keterangan"]))
-        total_nilai += item["Nilai"]
+        if item["Nilai"] != 0:
+            tree.insert("", "end", values=(item["Parameter"], item["Score"], item["Nilai"], item["Keterangan"]))
+            total_nilai += item["Nilai"]
     tree.insert("", "end", values=("TOTAL", "", round(total_nilai, 2), ""), tags=("total",))
     tree.tag_configure("total", background="#e0e0e0", font=("Arial", 10, "bold"))
 
 # %%
 def process_chemist_calculation(df_mobile_input):
-    global tree
+    global tree, diperiksa, pokok_sample
     if not is_widget_alive(tree):
         messagebox.showerror("Error", "Tabel hasil tidak tersedia.")
         return
@@ -4577,7 +4858,7 @@ def process_chemist_calculation(df_mobile_input):
         messagebox.showerror("Error", "Data tidak ditemukan untuk kombinasi input tersebut.")
         return    
     
-    print(filtered_df.columns)
+    diperiksa = filtered_df["Nama Petugas"].iloc[0]
     luas = filtered_df["Luas"].sum()
     # total_tenaga_semprot = filtered_df["Total Tenaga Kerja"].sum()
     pokok_sample = filtered_df["Jumlah Pokok"].sum()
@@ -4704,8 +4985,9 @@ def process_chemist_calculation(df_mobile_input):
         tree.delete(i)
     total_nilai = 0
     for item in table:
-        tree.insert("", "end", values=(item["Parameter"], item["Score"], item["Nilai"], item["Keterangan"]))
-        total_nilai += item["Nilai"]
+        if item["Nilai"] != 0:
+            tree.insert("", "end", values=(item["Parameter"], item["Score"], item["Nilai"], item["Keterangan"]))
+            total_nilai += item["Nilai"]
     tree.insert("", "end", values=("TOTAL", "", round(total_nilai, 2), ""), tags=("total",))
     tree.tag_configure("total", background="#e0e0e0", font=("Arial", 10, "bold"))
 
@@ -4740,6 +5022,110 @@ def update_blok_combobox():
             selected_blok.set("None")
 
 # %%
+def processed_pdfs(processed_pdf_files, rejected_pdf_files, approved_pdf_files):
+    global processed_table, \
+    rejected_table, \
+    approved_table, \
+    back_button, \
+    current_menu, \
+    pdf_display_area
+        
+    if not root_exists:
+        return
+
+    hide_all_widgets()
+    current_menu = "processed_pdfs"
+
+    # === SCROLLABLE CONTAINER ===
+    outer_frame = tk.Frame(root)
+    outer_frame.grid(row=0, column=0, sticky="nsew")
+    root.grid_rowconfigure(0, weight=1)
+    root.grid_columnconfigure(0, weight=1)
+    outer_frame.grid_rowconfigure(0, weight=1)
+    outer_frame.grid_columnconfigure(0, weight=1)
+
+    scrollable_frame = make_scrollable_frame(outer_frame)
+    scrollable_frame.grid_columnconfigure(0, weight=1)
+
+    row = 0
+
+    # Processed pdfs
+    label_processed_pdfs = make_label(parent=scrollable_frame, text="Processed PDF", row=row, font=("Arial", 16, "bold"))
+    row += 1
+
+    processed_table = ttk.Treeview(scrollable_frame, columns=PDF_TABLE_COLUMNS, show="headings", height=12)
+    for col in PDF_TABLE_COLUMNS:
+        processed_table.heading(col, text=col)
+        processed_table.column(col, anchor="center", width=180)
+    processed_table.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    for i in processed_table.get_children():
+        processed_table.delete(i)
+        
+    for item in processed_pdf_files:
+        pdf_title = item["title"]
+        pdf_date = item["createdDate"]
+        pdf_url = item["alternateLink"]  # Asumsikan ini adalah URL Google Drive file PDF
+        processed_table.insert("", "end", values=(pdf_title, pdf_date))
+
+    # Mengikat event <<TreeviewSelect>> untuk menangkap pilihan baris
+    processed_table.bind("<<TreeviewSelect>>", lambda event: display_pdf(event, processed_pdf_files, "Processed"))
+
+    # Rejected pdfs
+    label_rejected_pdfs = make_label(parent=scrollable_frame, text="Rejected PDF", row=row, font=("Arial", 16, "bold"))
+    row += 1
+
+    rejected_table = ttk.Treeview(scrollable_frame, columns=PDF_TABLE_COLUMNS, show="headings", height=12)
+    for col in PDF_TABLE_COLUMNS:
+        rejected_table.heading(col, text=col)
+        rejected_table.column(col, anchor="center", width=180)
+    rejected_table.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    for i in rejected_table.get_children():
+        rejected_table.delete(i)
+        
+    for item in rejected_pdf_files:
+        pdf_title = item["title"]
+        pdf_date = item["createdDate"]
+        pdf_url = item["alternateLink"]  # Asumsikan ini adalah URL Google Drive file PDF
+        rejected_table.insert("", "end", values=(pdf_title, pdf_date))
+
+    # Mengikat event <<TreeviewSelect>> untuk menangkap pilihan baris
+    rejected_table.bind("<<TreeviewSelect>>", lambda event: display_pdf(event, rejected_pdf_files, "Rejected"))
+
+    # Approved pdfs
+    label_approved_pdfs = make_label(parent=scrollable_frame, text="Approved PDF", row=row, font=("Arial", 16, "bold"))
+    row += 1
+
+    approved_table = ttk.Treeview(scrollable_frame, columns=PDF_TABLE_COLUMNS, show="headings", height=12)
+    for col in PDF_TABLE_COLUMNS:
+        approved_table.heading(col, text=col)
+        approved_table.column(col, anchor="center", width=180)
+    approved_table.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
+    row += 1
+
+    for i in approved_table.get_children():
+        approved_table.delete(i)
+        
+    for item in approved_pdf_files:
+        pdf_title = item["title"]
+        pdf_date = item["createdDate"]
+        pdf_url = item["alternateLink"]  # Asumsikan ini adalah URL Google Drive file PDF
+        approved_table.insert("", "end", values=(pdf_title, pdf_date))
+
+    # Mengikat event <<TreeviewSelect>> untuk menangkap pilihan baris
+    approved_table.bind("<<TreeviewSelect>>", lambda event: display_pdf(event, approved_pdf_files, "Approved"))
+
+    # Tempat untuk menampilkan PDF di bawah tabel
+    pdf_display_area = tk.Label(scrollable_frame, text="Select a PDF to preview", font=("Arial", 12))
+    pdf_display_area.grid(row=row, column=0, padx=10, pady=10, sticky="w")
+
+    back_button = make_button(scrollable_frame, text="Back", row=row+1, command=go_back, font=("Arial", 10), bg=SECONDARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
+    row += 1
+
+# %%
 def qa_calculate_production():
     global label_tanggal_qa_terakhir, entry_tanggal_qa_terakhir, button_tanggal_qa_terakhir, \
         label_tanggal_kosong, label_tanggal_salah, \
@@ -4747,6 +5133,8 @@ def qa_calculate_production():
         label_estate, selected_estate, combobox_estate, \
         label_divisi, selected_divisi, combobox_divisi, \
         label_blok, selected_blok, combobox_blok, \
+        label_mandor, entry_mandor, \
+        label_sph, entry_sph, \
         label_actual, entry_actual, \
         label_budget, entry_budget, \
         label_restant, entry_restant, \
@@ -4827,6 +5215,18 @@ def qa_calculate_production():
     selected_blok = tk.StringVar(value=available_blok_list[0])
     combobox_blok, _ = make_combobox(scrollable_frame, values=available_blok_list, row=row, state="readonly", textvariable=selected_blok)
     row += 1
+
+    label_mandor = make_label(parent=scrollable_frame, text="Mandor Panen", row=row, font=("Arial", 12))
+    row+=1
+
+    entry_mandor = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
+    row+=1
+
+    label_sph = make_label(parent=scrollable_frame, text="SPH", row=row, font=("Arial", 12))
+    row+=1
+
+    entry_sph = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
+    row+=1
 
     label_actual = make_label(parent=scrollable_frame, text="Actual", row=row, font=("Arial", 12))
     row += 1
@@ -4910,6 +5310,8 @@ def qa_calculate_production():
         label_estate, combobox_estate,
         label_divisi, combobox_divisi,
         label_blok, combobox_blok,
+        label_mandor, entry_mandor,
+        label_sph, entry_sph,
         label_actual, entry_actual,
         label_budget, entry_budget,
         label_restant, entry_restant,
@@ -4949,6 +5351,7 @@ def qa_calculate_nursery():
         label_estate, selected_estate, combobox_estate, \
         label_divisi, selected_divisi, combobox_divisi, \
         label_blok, selected_blok, combobox_blok, \
+        label_mandor, entry_mandor, \
         label_circle_path_tph_title, label_keterangan_cpt, entry_keterangan_cpt, \
         label_kondisi_gawangan_title, label_keterangan_gawangan, entry_keterangan_gawangan, \
         label_titi_panen_title, label_keterangan_titi_panen, entry_keterangan_titi_panen, \
@@ -5031,6 +5434,12 @@ def qa_calculate_nursery():
     selected_blok = tk.StringVar(value=available_blok_list[0])
     combobox_blok, _ = make_combobox(scrollable_frame, values=available_blok_list, row=row, state="readonly", textvariable=selected_blok)
     row += 1
+
+    label_mandor = make_label(parent=scrollable_frame, text="Mandor Perawatan", row=row, font=("Arial", 12))
+    row+=1
+
+    entry_mandor = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
+    row+=1
 
     # Kondisi Circle, Path dan TPH 
     label_circle_path_tph_title = make_label(parent=scrollable_frame, text="Kondisi Circle, Path dan TPH", row=row, font=("Arial", 14, "bold"))
@@ -5207,6 +5616,7 @@ def qa_calculate_fertilizer():
             label_estate, selected_estate, combobox_estate, \
             label_divisi, selected_divisi, combobox_divisi, \
             label_blok, selected_blok, combobox_blok, \
+            label_mandor, entry_mandor, \
             label_keterangan_pokok_tidak_terpupuk, entry_keterangan_pokok_tidak_terpupuk, \
             label_keterangan_piringan_gawangan, entry_keterangan_piringan_gawangan, \
             label_keterangan_cara_aplikasi, entry_keterangan_cara_aplikasi, \
@@ -5295,6 +5705,12 @@ def qa_calculate_fertilizer():
     selected_blok = tk.StringVar(value=available_blok_list[0])
     combobox_blok, _ = make_combobox(scrollable_frame, values=available_blok_list, row=row, state="readonly", textvariable=selected_blok)
     row += 1
+
+    label_mandor = make_label(parent=scrollable_frame, text="Mandor Pupuk", row=row, font=("Arial", 12))
+    row+=1
+
+    entry_mandor = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
+    row+=1
 
     # Kualitas Aplikasi
     label_kualitas_aplikasi_title = make_label(parent=scrollable_frame, text="Kualitas Aplikasi", row=row, font=("Arial", 14, "bold"))
@@ -5510,6 +5926,7 @@ def qa_calculate_chemist():
             label_estate, selected_estate, combobox_estate, \
             label_divisi, selected_divisi, combobox_divisi, \
             label_blok, selected_blok, combobox_blok, \
+            label_mandor, entry_mandor, \
             label_kualitas_aplikasi_title, \
             label_keterangan_kematian_gulma, entry_keterangan_kematian_gulma, \
             label_keterangan_pokok_tersemprot, entry_keterangan_pokok_tersemprot, \
@@ -5599,6 +6016,12 @@ def qa_calculate_chemist():
     selected_blok = tk.StringVar(value=available_blok_list[0])
     combobox_blok, _ = make_combobox(scrollable_frame, values=available_blok_list, row=row, state="readonly", textvariable=selected_blok)
     row += 1
+
+    label_mandor = make_label(parent=scrollable_frame, text="Mandor Chemist", row=row, font=("Arial", 12))
+    row+=1
+
+    entry_mandor = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
+    row+=1
 
     # Kualitas Aplikasi
     label_kualitas_aplikasi_title = make_label(parent=scrollable_frame, text="Kualitas Aplikasi", row=row, font=("Arial", 14, "bold"))
@@ -5803,7 +6226,7 @@ def main_process():
            canvas, scrollbar, inner_frame, \
            label_daily_rainfall, entry_daily_rainfall, submit_add_rainfall_button, \
            label_update_rainfall, entry_update_rainfall, submit_update_rainfall_button, \
-           entry_tanggal_qa_terakhir, entry_blok, entry_divisi, entry_tanggal_rencana_pupuk, entry_pokok_sample, entry_pokok_panen, entry_actual, entry_budget, \
+           entry_tanggal_qa_terakhir, entry_blok, entry_divisi, entry_mandor, entry_tanggal_rencana_pupuk, entry_pokok_sample, entry_pokok_panen, entry_sph, entry_actual, entry_budget, \
            entry_buah_panen, entry_buah_tertinggal, entry_berondolan_tertinggal, entry_buah_tertinggal_tph, \
            entry_berondolan_tertinggal_tph, entry_rotasi_panen, entry_restan, entry_jaring, entry_produktivitas_pemanen, \
            entry_administrasi_panen, entry_kualitas_tbs, entry_muatan_overload, \
@@ -5840,7 +6263,7 @@ def main_process():
            combobox_kartu_pengambilan_pencampuran_bahan, combobox_kalibrasi_alat_nozel, \
            combobox_alat_ukur_perkakas_perbaikan, combobox_peletakan_alat_semprot, \
            label_tanggal_qa_terakhir, \
-           label_blok, label_divisi, label_tanggal_rencana_pupuk, label_pokok_sample, label_pokok_panen, label_actual, label_budget, \
+           label_blok, label_divisi, label_mandor, label_tanggal_rencana_pupuk, label_pokok_sample, label_pokok_panen, label_sph, label_actual, label_budget, \
            label_buah_panen, label_buah_tertinggal, label_berondolan_tertinggal, label_buah_tertinggal_tph, \
            label_berondolan_tertinggal_tph, label_rotasi_panen, label_restan, label_jaring, label_produktivitas_pemanen, \
            label_administrasi_panen, label_kualitas_tbs, label_muatan_overload, \
@@ -5928,6 +6351,8 @@ def main_process():
     submit_estate_button = None
     label_blok = None
     entry_blok = None
+    label_mandor = None
+    entry_mandor = None
     label_divisi = None
     entry_divisi = None
     label_tanggal_rencana_pupuk = None
@@ -5939,6 +6364,8 @@ def main_process():
     entry_pokok_sample = None
     label_pokok_panen = None
     entry_pokok_panen = None
+    label_sph = None
+    entry_sph = None
     label_actual = None
     entry_actual = None
     label_budget = None
@@ -6187,6 +6614,7 @@ def main_process():
     splash_button = None
     photo_upload_frame = None
     photos_data = []
+    pdf_data = []
     label_tanggal_kosong = None
     label_tanggal_salah = None
     label_identifikasi_qa = None
@@ -6240,7 +6668,6 @@ def main_process():
     create_splash_screen()
     root.iconbitmap(COMPANY_LOGO)  # Make sure the path is correct
     root.mainloop()
-
 
 # %% [markdown]
 #  ## 13. Main
