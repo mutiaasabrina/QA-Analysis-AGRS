@@ -12,12 +12,16 @@ import datetime
 import traceback
 import random
 import json
+import io
 
 # Third-Party Libraries
 import pandas as pd
 import pytz
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 from tkinter import filedialog
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
@@ -29,6 +33,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 import webbrowser
+import tempfile
 
 # GUI Libraries
 import tkinter as tk
@@ -38,7 +43,342 @@ from PIL import Image, ImageTk
 import fitz
 
 # %% [markdown]
-#  ## 2. Utility Functions
+#  ## 2. Configuration and Constants
+
+# %%
+# --- Authentication ---
+JSON_PATH = resource_path('enginewaktuaplikasipemupukan-03e33861bae9.json')
+# SHEET_URL = "https://docs.google.com/spreadsheets/d/1yCrPTPT6xVMEAYs7d31Vya0GhxQ_AySbfg-CXD7UaMw/edit?usp=sharing"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1I0dkJq30JSM-sUaGUhd0eZiAdeuVjI7Ls4rNLWd6bbE/edit?usp=sharing"
+SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+SPLASH_IMAGE = resource_path('bgqa.png')
+PANCARAN_LOGO = resource_path("Logo_Pancaran_Agro-removebg-preview.ico")
+COMPANY_LOGO = resource_path("Logo_TDK.png")
+PHOTO_FOLDER_ID = "1_OgkeR2Iooh9dyoIC6gskIYnJnt8qyJ6"
+PDF_REJECTED_FOLDER_ID = "1GqFyobGO6UfFYHy4pqCNuQfX21DtU4RC"
+PDF_APPROVED_FOLDER_ID = "1C36T73QJxDNMJsZJR_WsHgv4GlPp-60o"
+PDF_PROCESSED_FOLDER_ID = "1ksjnPFekcrxb4-6NNr7bdyNBMzHTqtfT"
+APPROVED_LOGO = resource_path("Approved.png")
+DONE_LOGO = resource_path("Done.png")
+
+# --- Sheets ---
+SHEET_NAMES_INPUT = ["Input - Production", "Input - Nursery", "Input - Chemist", "Input - Fertilizer"]
+SHEET_NAMES_OUTPUT = ["Output - Production", "Output - Nursery", "Output - Chemist", "Output - Fertilizer"]
+SHEET_NAMES_OUTPUT_WEIGHT = ["Output (Weight) - Production", "Output (Weight) - Nursery", "Output (Weight) - Chemist", "Output (Weight) - Fertilizer"]
+
+ESTATE_OPTIONS = ["Inti", "Plasma"]
+DAY_IN_MONTH = 30
+DATABASE_IDENTIFIER = ["Blok", "Panen Rotasi", "Tanggal Periksa", "Divisi", "Estate", "DivisiLabel", "Total", "Jenis Pupuk", "Dosis / Pokok", "Tanggal Pemupukan", "Jenis Chemist", "Dosis / Knapsack", "Tanggal Semprot"]
+TABLE_COLUMNS = ("Parameter", "Score", "Nilai", "Keterangan")
+PDF_TABLE_COLUMNS = ("Title", "Date Modified")
+
+# Production
+BRONDOLAN_TINGGAL_OPTIONS = [
+    "< 0,5 butir/pkk",
+    "> 0,5 - 0,6 butir/pkk",
+    "> 0,6 - 0,75 butir/pkk",
+    "> 0,75 - 1 butir/pkk",
+    "> 1 butir/pkk"]
+
+BUAH_TINGGAL_TPH_OPTIONS = [
+    "0 jjg", 
+    "> 0 - 0,2 jjg", 
+    "> 0,2 - 0,4 jjg", 
+    "> 0,4 - 0,6 jjg", 
+    "> 0,6 jjg"]
+
+BRONDOLAN_TINGGAL_TPH_OPTIONS = [
+    "< 5 butir", 
+    "> 5 - 7 butir", 
+    "> 7 - 10 butir", 
+    "> 10 - 12 butir", 
+    "> 12 butir"]
+
+# Nursery
+TITI_PANEN_OPTIONS = [
+    "Rasio standar, permanen, kondisi baik", 
+    "Rasio standar, semi permanen, kondisi baik", 
+    "Rasio kurang standar, semi permanen, kondisi baik", 
+    "Rasio kurang standar, semi permanen, kondisi rusak", 
+    "Tidak ada sama sekali"]
+
+JALAN_JEMBATAN_OPTIONS = [
+    "Jalan rata (tidak lubang/rel), jembatan permanen", 
+    "Jalan kondisi sedang, jembatan permanen", 
+    "Jalan rusak sebagian, jembatan rusak sebagian", 
+    "Jalan dominan rusak, jembatan rusak", 
+    "Jalan rusak parah, jembatan rusak parah"]
+
+PEILSCALE_OPTIONS = [
+    "> -30cm, kondisi baik, update", 
+    "-30cm sampai -20cm, kondisi sedang, update", 
+    "-20cm sampai -10cm, kondisi sedang, update", 
+    "-10cm sampai 0cm, kondisi rusak, update", 
+    "> 0cm, kondisi rusak, tidak update"]
+
+BENEFICIAL_PLANT_OPTIONS = [
+    "Semua ruas jalan terdapat tanaman rasio 10m2/ha", 
+    "Salah satu MR atau CR saja, populasi sesuai rasio", 
+    "Salah satu MR atau CR saja, populasi < rasio", 
+    "Salah satu MR atau CR , jarang dan tidak terawat", 
+    "Tidak dijumpai tanaman sama sekali"]
+
+BARN_OWL_OPTIONS = [
+    "Rasio gupon <40 ha, Ada burung hantu,  gupon aktif, kondisi baik, sensus rutin", 
+    "Ada burung hantu,  gupon aktif, kondisi baik, sensus rutin", 
+    "Ada atau tidak ada burung hantu,  gupon aktif, kondisi baik atau rusak, sensus jarang", 
+    "Tidak ada burung hantu, ada gupon, kondisi baik atau rusak, sensus jarang", 
+    "Tidak ada burung hantu, tidak ada gupon, sensus tidak"]
+
+# Fertilizer
+CARA_APLIKASI_OPTIONS = [
+    "> 95%",
+    "85% - < 95%",
+    "75% - < 85%",
+    "65% - < 75%",
+    "< 65%"]
+
+KESESUAIAN_DOSIS_ALAT_TABUR_OPTIONS = [
+    "> 95%",
+    "90% - < 95%",
+    "85% - < 90%",
+    "80% - < 85%",
+    "< 80%"]
+
+TENAGA_PEMUPUK_OPTIONS = [
+    "Organisasi tetap, training rutin",
+    "Organisasi tetap, tetapi training tidak rutin",
+    "Organisasi tidak tetap, training rutin",
+    "Organisasi tidak tetap, training tidak rutin",
+    "Organisasi tidak tetap, tidak ada training"]
+
+SUPERVISI_OPTIONS = [
+    "Lengkap",
+    "Ada semua, kecuali tidak ada Assistant / Mandor 1",
+    "Ada semua, kecuali tidak ada Assistant & Security",
+    "Ada semua, kecuali tidak ada Assistant & Mandor",
+    "Tidak ada sama sekali supervisi"]
+
+PEMERIKSAAN_ANCAK_PEMUPUKAN_OPTIONS = [
+    "100%",
+    "95% - < 100%",
+    "90% - < 95%",
+    "85% - < 90%",
+    "< 85%"]
+
+JADWAL_PEMUPUKAN_OPTIONS = [
+    "Sesuai bulan rekomendasi",
+    "Terlambat / maju 1 bulan",
+    "Terlambat / maju 2 bulan",
+    "Terlambat / maju 3 bulan",
+    "Terlambat / maju > 3 bulan"]
+
+APD_PEKERJA_OPTIONS = [
+    "Lengkap",
+    "Kurang dari 1 item",
+    "Kurang dari 2 item",
+    "Kurang dari 3 item",
+    "Tidak ada APD"]
+
+FISIK_PUPUK_OPTIONS = [
+    "Tekstur baik, kondisi kering",
+    "Tekstur baik, sebagian menggumpal",
+    "Tekstur kurang baik, sebagian menggumpal",
+    "Tekstur tidak baik, sebagian menggumpal",
+    "Tekstur tidak baik, semua menggumpal"]
+
+PELETAKAN_PUPUK_OPTIONS = [
+    "Di TPP / dalam blok, dekat piringan",
+    "Dalam blok, jauh dari piringan",
+    "Di badan jalan sebagian",
+    "Semua diletak di badan jalan",
+    "Masuk ke parit jalan"]
+
+PUPUK_TERCECER_OPTIONS = [
+    "0%",
+    "> 0% - 1%",
+    "> 1% - 2%",
+    "> 2% - 3%",
+    "> 3%"]
+
+PENGEMBALIAN_KARUNG_OPTIONS = [
+    "Rapi, gulungan 10 lembar, dikumpul pada hari H",
+    "Rapi, gulungan kurang sesuai, dikumpul pada H+1",
+    "Kurang rapi, gulungan kurang sesuai, dikumpul pada H+1",
+    "Kurang rapi, gulungan kurang sesuai, dikumpul pada H+2",
+    "Tidak rapi, gulungan tidak sesuai, dikumpul > H+2"]
+
+# Chemist
+KONDISI_ALAT_SEMPROT_OPTIONS = [
+    "100%",
+    "95% - < 100%",
+    "90% - < 95%",
+    "85% - < 90%",
+    "< 85%"]
+
+
+KESERAGAMAN_NOZEL_OPTIONS = [
+    "100%",
+    "95% - < 100%",
+    "90% - < 95%",
+    "85% - < 90%",
+    "< 85%"]
+
+DOSIS_KNAPSACK_OPTIONS = [
+    "> 100%",
+    "97,5% - < 100%",
+    "95% - < 97,5%",
+    "92,5% - < 95%",
+    "< 92,5%"]
+
+BAHAN_HERBISIDA_OPTIONS = [
+    "Sesuai gulma sasaran, jumlah yang dibawa sesuai kebutuhan",
+    "Kurang sesuai gulma sasaran, jumlah yang dibawa sesuai kebutuhan",
+    "Sesuai gulma sasaran, jumlah yang dibawa tidak sesuai kebutuhan",
+    "Kurang sesuai gulma sasaran, jumlah tidak sesuai kebutuhan",
+    "Tidak sesuai gulma sasaran, jumlah tidak sesuai"]
+
+PENGENDALIAN_GULMA_OPTIONS = [
+    "Terdapat RKB/ RKH, sesuai program rotasi",
+    "Terdapat RKB/ RKH, kurang sesuai program rotasi",
+    "Terdapat RKB/ RKH, tidak sesuai program rotasi",
+    "Tidak terdapat RKB/ RKH, sesuai program rotasi",
+    "Tidak terdapat RKB/ RKH, tidak sesuai program rotasi"]
+
+PENGGUNAAN_HK_OPTIONS = [
+    "95% - 100%",
+    "90% - < 95%",
+    "85% - < 90%",
+    "80% - < 85%",
+    "< 80% atau > 100%"]
+
+APD_PEKERJA_CHEMIST_OPTIONS = [
+    "Lengkap",
+    "Kurang dari 1 item",
+    "Kurang dari 2 item",
+    "Kurang dari 3 item",
+    "Lebih dari 4 item"]
+
+KOTAK_P3K_OPTIONS = [
+    "Lengkap dan dibawa mandor",
+    "Kurang dari 1 item, dibawa mandor",
+    "Kurang dari 2 item, dibawa mandor",
+    "Kurang dari 3 item, tidak dibawa mandor",
+    "Tidak ada sama sekali"]
+
+KARTU_PENGAMBILAN_PENCAMPURAN_BAHAN_OPTIONS = [
+    "Kartu lengkap dan update",
+    "Kartu lengkap, terlambat 1 hari",
+    "Kartu lengkap, terlambat > 2 hari",
+    "Kartu tidak lengkap, terlambat 1 hari",
+    "Kartu dan monitoring tidak ada"]
+
+KALIBRASI_ALAT_NOZEL_OPTIONS = [
+    "Rutin dan tercatat",
+    "Rutin, tidak tercatat",
+    "Kurang rutin, tercatat",
+    "Tidak rutin, tercatat",
+    "Tidak pernah"]
+
+GELAS_UKUR_PERKAKAS_PERBAIKAN_ALAT_SEMPROT_OPTIONS = [
+    "Gelas ukur terkalibrasi, alat perbaikan lengkap",
+    "Gelas ukur terkalibrasi, alat perbaikan tidak lengkap",
+    "Gelas ukur tidak terkalibrasi, alat perbaikan lengkap",
+    "Gelas ukur tidak terkalibrasi, alat perbaikan tidak lengkap",
+    "Tidak membawa alat takaran dan alat perbaikan"]
+
+PELETAKAN_ALAT_SEMPROT_OPTIONS = [
+    "Semua alat dan tercatat",
+    "Semua alat, tidak tercatat",
+    "Sebagian alat saja dan tercatat",
+    "Sebagian alat saja, tidak tercatat",
+    "Tidak ada gudang dan pencatatan"]
+
+APD_PEKERJA_RANK = [
+    "Lengkap",
+    "Kurang dari 1 item",
+    "Kurang dari 2 item",
+    "Kurang dari 3 item",
+    "Tidak ada APD"]
+
+YEARLY_WEIGHT_PRODUCTION = {
+    "Pencapaian Produksi": {"2025": "20%", "2026": "18%", "2027": "15%"},
+    "Kualitas Panen - TBS Tertinggal": {"2025": "15%", "2026": "13%", "2027": "12%"},
+    "Kualitas Panen - LF Tertinggal": {"2025": "15%", "2026": "13%", "2027": "12%"},
+    "Kualitas Transport - Jjg di TPH": {"2025": "5%", "2026": "8%", "2027": "4%"},
+    "Kualitas Transport - LF di TPH": {"2025": "10%", "2026": "8%", "2027": "4%"},
+    "Rotasi Panen": {"2025": "15%", "2026": "13%", "2027": "12%"},
+    "Restan": {"2025": "8%", "2026": "10%", "2027": "10%"},
+    "Pemakaian Jaring/Terpal": {"2025": "3%", "2026": "5%", "2027": "5%"},
+    "Kualitas Panen - TBS Busuk Tinggal": {"2025": "10%", "2026": "13%", "2027": "12%"},
+    "Produktivitas Pemanen": {"2025": "0%", "2026": "7%", "2027": "4%"},
+    "Administrasi Panen": {"2025": "0%", "2026": "5%", "2027": "5%"},
+    "Kualitas TBS": {"2025": "0%", "2026": "0%", "2027": "12%"},
+    "Muatan Overload": {"2025": "0%", "2026": "0%", "2027": "5%"},
+}
+
+YEARLY_WEIGHT_NURSERY = {
+    "Kondisi Circle, Path dan TPH": {"2025": "20%", "2026": "18%", "2027": "15%"},
+    "Kondisi Gawangan": {"2025": "18%", "2026": "15%", "2027": "12%"},
+    "Titi Panen": {"2025": "8%", "2026": "10%", "2027": "10%"},
+    "Jalan & Jembatan": {"2025": "8%", "2026": "10%", "2027": "10%"},
+    "Pruning dan Sanitasi": {"2025": "18%", "2026": "15%", "2027": "15%"},
+    "Susunan Pelepah": {"2025": "10%", "2026": "10%", "2027": "8%"},
+    "Hama Penyakit": {"2025": "10%", "2026": "10%", "2027": "10%"},
+    "Beneficial Plant": {"2025": "3%", "2026": "3%", "2027": "5%"},
+    "Peilscale": {"2025": "5%", "2026": "5%", "2027": "5%"},
+    "Cover Crop (Neprolepis sp.)": {"2025": "0%", "2026": "2%", "2027": "5%"},
+    "Barn Owl": {"2025": "0%", "2026": "2%", "2027": "5%"},
+}
+
+YEARLY_WEIGHT_FERTILIZER = {
+    "Pokok Tidak Terpupuk": {"2025": "20%", "2026": "18%", "2027": "18%"},
+    "Kondisi Piringan / Gawangan": {"2025": "15%", "2026": "15%", "2027": "15%"},
+    "Cara Aplikasi": {"2025": "12%", "2026": "10%", "2027": "10%"},
+    "Keseragaman Alat Tabur": {"2025": "12%", "2026": "10%", "2027": "10%"},
+    "Kesesuaian Dosis Alat Tabur": {"2025": "10%", "2026": "10%", "2027": "10%"},
+    "Tenaga Pemupuk": {"2025": "5%", "2026": "5%", "2027": "5%"},
+    "Supervisi": {"2025": "6%", "2026": "5%", "2027": "5%"},
+    "Terdapat Pemeriksaan Ancak Pemupukan": {"2025": "5%", "2026": "5%", "2027": "5%"},
+    "Jadwal Pemupukan": {"2025": "5%", "2026": "5%", "2027": "5%"},
+    "APD Pekerja": {"2025": "5%", "2026": "5%", "2027": "5%"},
+    "Fisik Pupuk": {"2025": "5%", "2026": "3%", "2027": "3%"},
+    "Peletakan Pupuk": {"2025": "0%", "2026": "3%", "2027": "3%"},
+    "Pupuk Tercecer": {"2025": "0%", "2026": "3%", "2027": "3%"},
+    "Pengembalian Karung": {"2025": "0%", "2026": "3%", "2027": "3%"},
+}
+
+YEARLY_WEIGHT_CHEMIST = {
+    "Kematian Gulma": {"2025": "22%", "2026": "22%", "2027": "20%"},
+    "Pokok Tersemprot": {"2025": "5%", "2026": "5%", "2027": "5%"},
+    "Bahan Herbisida yang Dibawa ke Ancak": {"2025": "10%", "2026": "10%", "2027": "10%"},
+    "Kondisi Alat Semprot": {"2025": "10%", "2026": "10%", "2027": "10%"},
+    "Keseragaman Nozel": {"2025": "10%", "2026": "8%", "2027": "8%"},
+    "Dosis per Knapsack Sesuai Standar Kalibrasi": {"2025": "7%", "2026": "7%", "2027": "7%"},
+    "Program Pengendalian Gulma": {"2025": "7%", "2026": "7%", "2027": "7%"},
+    "Penggunaan HK Sesuai Norma Pekerjaan": {"2025": "7%", "2026": "7%", "2027": "7%"},
+    "APD Pekerja": {"2025": "5%", "2026": "5%", "2027": "5%"},
+    "Kotak P3K Isi Lengkap dan Dibawa Oleh Mandor": {"2025": "0%", "2026": "4%", "2027": "5%"},
+    "Terdapat Kartu Pengambilan dan Pencampuran Bahan": {"2025": "5%", "2026": "4%", "2027": "4%"},
+    "Terdapat Kalibrasi Alat dan Nozel": {"2025": "5%", "2026": "4%", "2027": "4%"},
+    "Membawa Gelas Ukur & Perkakas Perbaikan Alat Semprot": {"2025": "5%", "2026": "5%", "2027": "5%"},
+    "Peletakan Alat Semprot": {"2025": "2%", "2026": "2%", "2027": "3%"},
+}
+
+QA_TYPE = ["QA Produksi", "QA Perawatan", "QA Pemupukan", "QA Chemist"]
+
+AVAILABLE_YEAR = ["2025", "2026", "2027"]
+
+FERTILIZER_TYPE = ["NPK 13", "NPK 15", "NPK 12", "Dolomite", "Urea", "MOP", "HGFB", "CuSO4", "Zincop Chelated", "Kieserite", "RP", "Kaptan", "TSP"]
+
+# --- Timezone ---
+CURRENT_TIMEZONE = pytz.timezone('Asia/Jakarta')
+
+photos_data = []  # list of {"path": ..., "note": ..., "widgets": ...}
+pdf_data = []
+
+# %% [markdown]
+#  ## 3. Utility Functions
 
 # %%
 # --- Styling and Misc ---
@@ -525,7 +865,7 @@ def process_uploaded_photos():
         messagebox.showinfo("Berhasil", "Foto berhasil diupload ke Google Drive.")
 
 # %%
-def process_uploaded_pdf():
+def upload_pdf_to_drive():
     global pdf_data
     
     for item in pdf_data:
@@ -545,386 +885,294 @@ def open_pdf(pdf_url):
     webbrowser.open(pdf_url)
 
 # %%
-def display_pdf(event, pdf_files, group_title=""):
-    # Mendapatkan item yang dipilih di Treeview
+def display_pdf(event, pdf_files=None, group_title=""):
+    """Display the selected PDF from the appropriate current list.
+    This function uses the global processed/rejected/approved pdf lists so the handler
+    will always operate on the freshest data. If the relevant list is empty it will
+    attempt to re-fetch PDFs from Drive as a fallback.
+    """
+    global pdf_id, processed_pdf_files, rejected_pdf_files, approved_pdf_files
 
+    # Choose the correct table and pdf list based on group_title
     if group_title == "Processed":
-        selected_item = processed_table.selection()
-        if selected_item:
-            item_id = selected_item[0]
-            # Ambil data PDF berdasarkan item yang dipilih
-            pdf_title = processed_table.item(item_id, "values")[0]
-            
-            # Mencari file PDF yang sesuai dengan title yang dipilih
-            selected_pdf = next(item for item in pdf_files if item["title"] == pdf_title)
-            pdf_url = selected_pdf["alternateLink"]
-
-            # Menampilkan PDF di bawah tabel
-            pdf_display_area.config(text=f"Previewing: {group_title} - {pdf_title}")
-            open_pdf(pdf_url)
+        table = processed_table
+        current_list = processed_pdf_files
     elif group_title == "Rejected":
-        selected_item = rejected_table.selection()
-        if selected_item:
-            item_id = selected_item[0]
-            # Ambil data PDF berdasarkan item yang dipilih
-            pdf_title = rejected_table.item(item_id, "values")[0]
-            
-            # Mencari file PDF yang sesuai dengan title yang dipilih
-            selected_pdf = next(item for item in pdf_files if item["title"] == pdf_title)
-            pdf_url = selected_pdf["alternateLink"]
-
-            # Menampilkan PDF di bawah tabel
-            pdf_display_area.config(text=f"Previewing: {group_title} - {pdf_title}")
-            open_pdf(pdf_url)
+        table = rejected_table
+        current_list = rejected_pdf_files
     elif group_title == "Approved":
-        selected_item = approved_table.selection()
-        if selected_item:
-            item_id = selected_item[0]
-            # Ambil data PDF berdasarkan item yang dipilih
-            pdf_title = approved_table.item(item_id, "values")[0]
-            
-            # Mencari file PDF yang sesuai dengan title yang dipilih
-            selected_pdf = next(item for item in pdf_files if item["title"] == pdf_title)
-            pdf_url = selected_pdf["alternateLink"]
+        table = approved_table
+        current_list = approved_pdf_files
+    else:
+        table = processed_table
+        current_list = processed_pdf_files
 
-            # Menampilkan PDF di bawah tabel
-            pdf_display_area.config(text=f"Previewing: {group_title} - {pdf_title}")
-            open_pdf(pdf_url)
+    selected_item = table.selection()
+    if not selected_item:
+        return
 
-# %% [markdown]
-#  ## 3. Configuration and Constants
+    item_id = selected_item[0]
+    pdf_title = table.item(item_id, "values")[0]
+
+    # If the current in-memory list is empty, try re-fetching from Drive once
+    if not current_list:
+        try:
+            processed_pdf_files, rejected_pdf_files, approved_pdf_files = fetch_pdfs()
+        except Exception as e:
+            messagebox.showerror("Error", f"Gagal mengambil daftar PDF: {e}")
+            return
+
+        if group_title == "Processed":
+            current_list = processed_pdf_files
+        elif group_title == "Rejected":
+            current_list = rejected_pdf_files
+        else:
+            current_list = approved_pdf_files
+
+    # Find the selected PDF metadata
+    try:
+        selected_pdf = next(item for item in current_list if item.get("title") == pdf_title)
+    except StopIteration:
+        messagebox.showerror("Error", f"PDF '{pdf_title}' tidak ditemukan. Coba klik Refresh.")
+        return
+
+    pdf_url = selected_pdf.get("alternateLink")
+    pdf_id = selected_pdf.get("id", "")
+
+    pdf_display_area.config(text=f"Previewing: {group_title} - {pdf_title}")
+    open_pdf(pdf_url)
 
 # %%
-# --- Authentication ---
-JSON_PATH = resource_path('enginewaktuaplikasipemupukan-03e33861bae9.json')
-# SHEET_URL = "https://docs.google.com/spreadsheets/d/1yCrPTPT6xVMEAYs7d31Vya0GhxQ_AySbfg-CXD7UaMw/edit?usp=sharing"
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1I0dkJq30JSM-sUaGUhd0eZiAdeuVjI7Ls4rNLWd6bbE/edit?usp=sharing"
-SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-SPLASH_IMAGE = resource_path('bgqa.png')
-PANCARAN_LOGO = resource_path("Logo_Pancaran_Agro-removebg-preview.ico")
-COMPANY_LOGO = resource_path("Logo_TDK.png")
-PHOTO_FOLDER_ID = "1_OgkeR2Iooh9dyoIC6gskIYnJnt8qyJ6"
-PDF_REJECTED_FOLDER_ID = "1GqFyobGO6UfFYHy4pqCNuQfX21DtU4RC"
-PDF_APPROVED_FOLDER_ID = "1C36T73QJxDNMJsZJR_WsHgv4GlPp-60o"
-PDF_PROCESSED_FOLDER_ID = "1ksjnPFekcrxb4-6NNr7bdyNBMzHTqtfT"
-APPROVED_LOGO = resource_path("Approved.png")
-DONE_LOGO = resource_path("Done.png")
+def move_file_between_folders(file_id, source_folder_id, destination_folder_id):
+    global pdf_id
+    try:
+        # Build service using service account credentials
+        creds = ServiceAccountCredentials.from_json_keyfile_name(JSON_PATH, SCOPE)
+        service = build('drive', 'v3', credentials=creds)
 
-# --- Sheets ---
-SHEET_NAMES_INPUT = ["Input - Production", "Input - Nursery", "Input - Chemist", "Input - Fertilizer"]
-SHEET_NAMES_OUTPUT = ["Output - Production", "Output - Nursery", "Output - Chemist", "Output - Fertilizer"]
-SHEET_NAMES_OUTPUT_WEIGHT = ["Output (Weight) - Production", "Output (Weight) - Nursery", "Output (Weight) - Chemist", "Output (Weight) - Fertilizer"]
+        # If source_folder_id is not provided, try to detect current parents and remove them
+        if not source_folder_id:
+            file_meta = service.files().get(fileId=file_id, fields='parents').execute()
+            current_parents = file_meta.get('parents', [])
+            remove_parents = ",".join(current_parents) if current_parents else None
+        else:
+            remove_parents = source_folder_id
 
-ESTATE_OPTIONS = ["Inti", "Plasma"]
-DAY_IN_MONTH = 30
-DATABASE_IDENTIFIER = ["Blok", "Panen Rotasi", "Tanggal Periksa", "Divisi", "Estate", "DivisiLabel", "Total", "Jenis Pupuk", "Dosis / Pokok", "Tanggal Pemupukan", "Jenis Chemist", "Dosis / Knapsack", "Tanggal Semprot"]
-TABLE_COLUMNS = ("Parameter", "Score", "Nilai", "Keterangan")
-PDF_TABLE_COLUMNS = ("Title", "Date Modified")
+        # Prepare parameters for update
+        params = {'fileId': file_id, 'addParents': destination_folder_id, 'fields': 'id, parents'}
+        if remove_parents:
+            params['removeParents'] = remove_parents
 
-# Production
-BRONDOLAN_TINGGAL_OPTIONS = [
-    "< 0,5 butir/pkk",
-    "> 0,5 - 0,6 butir/pkk",
-    "> 0,6 - 0,75 butir/pkk",
-    "> 0,75 - 1 butir/pkk",
-    "> 1 butir/pkk"]
+        updated = service.files().update(**params).execute()
 
-BUAH_TINGGAL_TPH_OPTIONS = [
-    "0 jjg", 
-    "> 0 - 0,2 jjg", 
-    "> 0,2 - 0,4 jjg", 
-    "> 0,4 - 0,6 jjg", 
-    "> 0,6 jjg"]
+        print(f"Moved file {file_id} to folder {destination_folder_id}. New parents: {updated.get('parents')}")
 
-BRONDOLAN_TINGGAL_TPH_OPTIONS = [
-    "< 5 butir", 
-    "> 5 - 7 butir", 
-    "> 7 - 10 butir", 
-    "> 10 - 12 butir", 
-    "> 12 butir"]
+        pdf_id = ""
 
-# Nursery
-TITI_PANEN_OPTIONS = [
-    "Rasio standar, permanen, kondisi baik", 
-    "Rasio standar, semi permanen, kondisi baik", 
-    "Rasio kurang standar, semi permanen, kondisi baik", 
-    "Rasio kurang standar, semi permanen, kondisi rusak", 
-    "Tidak ada sama sekali"]
+        return updated
 
-JALAN_JEMBATAN_OPTIONS = [
-    "Jalan rata (tidak lubang/rel), jembatan permanen", 
-    "Jalan kondisi sedang, jembatan permanen", 
-    "Jalan rusak sebagian, jembatan rusak sebagian", 
-    "Jalan dominan rusak, jembatan rusak", 
-    "Jalan rusak parah, jembatan rusak parah"]
+    except HttpError as e:
+        raise RuntimeError(f"Google Drive API error moving file: {e}")
+    except Exception as e:
+        raise RuntimeError(f"Error moving file on Google Drive: {e}")
 
-PEILSCALE_OPTIONS = [
-    "> -30cm, kondisi baik, update", 
-    "-30cm sampai -20cm, kondisi sedang, update", 
-    "-20cm sampai -10cm, kondisi sedang, update", 
-    "-10cm sampai 0cm, kondisi rusak, update", 
-    "> 0cm, kondisi rusak, tidak update"]
+# %%
+def add_approved_logo_to_drive_pdf(file_id, approved_logo_path=APPROVED_LOGO):
+    """Download PDF from Drive, insert the approved logo inside the Manager signature box
+    so it lines up with the DONE logos drawn by reportlab. Uses the same layout constants
+    used when generating the PDF: margin=50, row_height=60, padding=6 and 4 equal columns.
+    This computes coordinates in PDF (top-left origin used by PyMuPDF) by converting
+    the reportlab bottom-based y coordinates.
+    """
+    try:
+        if not approved_logo_path or not os.path.exists(approved_logo_path):
+            print("Approved logo not found; skipping adding approved logo.")
+            return
 
-BENEFICIAL_PLANT_OPTIONS = [
-    "Semua ruas jalan terdapat tanaman rasio 10m2/ha", 
-    "Salah satu MR atau CR saja, populasi sesuai rasio", 
-    "Salah satu MR atau CR saja, populasi < rasio", 
-    "Salah satu MR atau CR , jarang dan tidak terawat", 
-    "Tidak dijumpai tanaman sama sekali"]
+        creds = ServiceAccountCredentials.from_json_keyfile_name(JSON_PATH, SCOPE)
+        service = build('drive', 'v3', credentials=creds)
 
-BARN_OWL_OPTIONS = [
-    "Rasio gupon <40 ha, Ada burung hantu,  gupon aktif, kondisi baik, sensus rutin", 
-    "Ada burung hantu,  gupon aktif, kondisi baik, sensus rutin", 
-    "Ada atau tidak ada burung hantu,  gupon aktif, kondisi baik atau rusak, sensus jarang", 
-    "Tidak ada burung hantu, ada gupon, kondisi baik atau rusak, sensus jarang", 
-    "Tidak ada burung hantu, tidak ada gupon, sensus tidak"]
+        # --- Download the PDF into memory ---
+        request = service.files().get_media(fileId=file_id)
+        fh = io.BytesIO()
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
 
-# Fertilizer
-CARA_APLIKASI_OPTIONS = [
-    "> 95%",
-    "85% - < 95%",
-    "75% - < 85%",
-    "65% - < 75%",
-    "< 65%"]
+        fh.seek(0)
+        pdf_bytes = fh.read()
 
-KESESUAIAN_DOSIS_ALAT_TABUR_OPTIONS = [
-    "> 95%",
-    "90% - < 95%",
-    "85% - < 90%",
-    "80% - < 85%",
-    "< 80%"]
+        # --- Open PDF with PyMuPDF ---
+        doc = fitz.open(stream=pdf_bytes, filetype='pdf')
 
-TENAGA_PEMUPUK_OPTIONS = [
-    "Organisasi tetap, training rutin",
-    "Organisasi tetap, tetapi training tidak rutin",
-    "Organisasi tidak tetap, training rutin",
-    "Organisasi tidak tetap, training tidak rutin",
-    "Organisasi tidak tetap, tidak ada training"]
+        page_with_manager = None
+        manager_rect = None
 
-SUPERVISI_OPTIONS = [
-    "Lengkap",
-    "Ada semua, kecuali tidak ada Assistant / Mandor 1",
-    "Ada semua, kecuali tidak ada Assistant & Security",
-    "Ada semua, kecuali tidak ada Assistant & Mandor",
-    "Tidak ada sama sekali supervisi"]
+        # Search pages for the manager name; note the page where the manager name appears
+        for page in doc:
+            rects = page.search_for("Didik Wahyu Prasetyo")
+            if rects:
+                # Use first occurrence
+                page_with_manager = page
+                manager_rect = rects[0]
+                break
 
-PEMERIKSAAN_ANCAK_PEMUPUKAN_OPTIONS = [
-    "100%",
-    "95% - < 100%",
-    "90% - < 95%",
-    "85% - < 90%",
-    "< 85%"]
+        # Layout constants matching reportlab PDF generation
+        margin = 50
+        row_y_reportlab = 150  # y used in reportlab (distance from bottom)
+        row_height = 60
+        padding = 6
 
-JADWAL_PEMUPUKAN_OPTIONS = [
-    "Sesuai bulan rekomendasi",
-    "Terlambat / maju 1 bulan",
-    "Terlambat / maju 2 bulan",
-    "Terlambat / maju 3 bulan",
-    "Terlambat / maju > 3 bulan"]
+        # If we found the manager name page, use that page for placement; otherwise use last page
+        target_page = page_with_manager if page_with_manager else doc[-1]
+        page_rect = target_page.rect
+        page_w = page_rect.width
+        page_h = page_rect.height
 
-APD_PEKERJA_OPTIONS = [
-    "Lengkap",
-    "Kurang dari 1 item",
-    "Kurang dari 2 item",
-    "Kurang dari 3 item",
-    "Tidak ada APD"]
+        # Compute column width (4 equal columns as in reportlab)
+        col_width = (page_w - 2 * margin) / 4.0
+        img_w = col_width - padding * 2
+        img_h = row_height - padding * 2
 
-FISIK_PUPUK_OPTIONS = [
-    "Tekstur baik, kondisi kering",
-    "Tekstur baik, sebagian menggumpal",
-    "Tekstur kurang baik, sebagian menggumpal",
-    "Tekstur tidak baik, sebagian menggumpal",
-    "Tekstur tidak baik, semua menggumpal"]
+        # Manager box is the 4th column (index 3)
+        box_x = margin + col_width * 3
+        # reportlab box_y is measured from bottom; convert to top-based coordinate for fitz
+        # In reportlab the image bottom-left is at (box_x + padding, box_y + padding)
+        # For fitz, y0 (top) = page_h - (box_y + padding + img_h)
+        x0 = box_x + padding
+        y0 = page_h - (row_y_reportlab + padding + img_h)
+        img_rect = fitz.Rect(x0, y0, x0 + img_w, y0 + img_h)
 
-PELETAKAN_PUPUK_OPTIONS = [
-    "Di TPP / dalam blok, dekat piringan",
-    "Dalam blok, jauh dari piringan",
-    "Di badan jalan sebagian",
-    "Semua diletak di badan jalan",
-    "Masuk ke parit jalan"]
+        try:
+            target_page.insert_image(img_rect, filename=approved_logo_path, keep_proportion=True)
+        except Exception as e:
+            print(f"Failed to insert approved image at computed manager box: {e}")
+            # Fallback: try a conservative placement near the right side at similar vertical pos
+            try:
+                fallback_x0 = page_w - 50 - img_w
+                fallback_y0 = page_h - (row_y_reportlab + padding + img_h)
+                fallback_rect = fitz.Rect(fallback_x0, fallback_y0, fallback_x0 + img_w, fallback_y0 + img_h)
+                target_page.insert_image(fallback_rect, filename=approved_logo_path, keep_proportion=True)
+            except Exception as e2:
+                print(f"Fallback insertion also failed: {e2}")
 
-PUPUK_TERCECER_OPTIONS = [
-    "0%",
-    "> 0% - 1%",
-    "> 1% - 2%",
-    "> 2% - 3%",
-    "> 3%"]
+        # --- Save modified PDF to memory ---
+        out = io.BytesIO()
+        doc.save(out)
+        out.seek(0)
 
-PENGEMBALIAN_KARUNG_OPTIONS = [
-    "Rapi, gulungan 10 lembar, dikumpul pada hari H",
-    "Rapi, gulungan kurang sesuai, dikumpul pada H+1",
-    "Kurang rapi, gulungan kurang sesuai, dikumpul pada H+1",
-    "Kurang rapi, gulungan kurang sesuai, dikumpul pada H+2",
-    "Tidak rapi, gulungan tidak sesuai, dikumpul > H+2"]
+        # --- Update the file on Drive with new content ---
+        media = MediaIoBaseUpload(out, mimetype='application/pdf', resumable=True)
+        updated = service.files().update(fileId=file_id, media_body=media).execute()
+        print(f"Inserted approved logo into file {file_id}")
 
-# Chemist
-KONDISI_ALAT_SEMPROT_OPTIONS = [
-    "100%",
-    "95% - < 100%",
-    "90% - < 95%",
-    "85% - < 90%",
-    "< 85%"]
+    except Exception as e:
+        print(f"Failed to add approved logo to PDF: {e}")
 
 
-KESERAGAMAN_NOZEL_OPTIONS = [
-    "100%",
-    "95% - < 100%",
-    "90% - < 95%",
-    "85% - < 90%",
-    "< 85%"]
+# %%
+def toggle_pdf_report_button_visibility(*args):
+    if not pdf_id:
+        # Case: Processed PDF is not selected
+        print("Processed PDF is not selected.")
+        for w in conditional_widgets:
+            w.grid_remove()
 
-DOSIS_KNAPSACK_OPTIONS = [
-    "> 100%",
-    "97,5% - < 100%",
-    "95% - < 97,5%",
-    "92,5% - < 95%",
-    "< 92,5%"]
+    else:
+        # Case: Processed PDF is selected
+        print("Processed PDF is selected.")
+        for w in conditional_widgets:
+            w.grid()
 
-BAHAN_HERBISIDA_OPTIONS = [
-    "Sesuai gulma sasaran, jumlah yang dibawa sesuai kebutuhan",
-    "Kurang sesuai gulma sasaran, jumlah yang dibawa sesuai kebutuhan",
-    "Sesuai gulma sasaran, jumlah yang dibawa tidak sesuai kebutuhan",
-    "Kurang sesuai gulma sasaran, jumlah tidak sesuai kebutuhan",
-    "Tidak sesuai gulma sasaran, jumlah tidak sesuai"]
+# %%
+def fetch_pdfs():
+    global processed_pdf_files, rejected_pdf_files, approved_pdf_files
+    processed_pdf_files = fetch_processed_pdfs(PDF_PROCESSED_FOLDER_ID)
+    rejected_pdf_files = fetch_processed_pdfs(PDF_REJECTED_FOLDER_ID)
+    approved_pdf_files = fetch_processed_pdfs(PDF_APPROVED_FOLDER_ID)
 
-PENGENDALIAN_GULMA_OPTIONS = [
-    "Terdapat RKB/ RKH, sesuai program rotasi",
-    "Terdapat RKB/ RKH, kurang sesuai program rotasi",
-    "Terdapat RKB/ RKH, tidak sesuai program rotasi",
-    "Tidak terdapat RKB/ RKH, sesuai program rotasi",
-    "Tidak terdapat RKB/ RKH, tidak sesuai program rotasi"]
+    return processed_pdf_files, rejected_pdf_files, approved_pdf_files
 
-PENGGUNAAN_HK_OPTIONS = [
-    "95% - 100%",
-    "90% - < 95%",
-    "85% - < 90%",
-    "80% - < 85%",
-    "< 80% atau > 100%"]
+# %%
+def refresh_table():
+    global processed_table, rejected_table, approved_table, \
+        processed_pdf_files, rejected_pdf_files, approved_pdf_files
 
-APD_PEKERJA_CHEMIST_OPTIONS = [
-    "Lengkap",
-    "Kurang dari 1 item",
-    "Kurang dari 2 item",
-    "Kurang dari 3 item",
-    "Lebih dari 4 item"]
+    processed_pdf_files, rejected_pdf_files, approved_pdf_files = fetch_pdfs()
 
-KOTAK_P3K_OPTIONS = [
-    "Lengkap dan dibawa mandor",
-    "Kurang dari 1 item, dibawa mandor",
-    "Kurang dari 2 item, dibawa mandor",
-    "Kurang dari 3 item, tidak dibawa mandor",
-    "Tidak ada sama sekali"]
+    for i in processed_table.get_children():
+        processed_table.delete(i)
+        
+    for item in processed_pdf_files:
+        pdf_title = item["title"]
+        pdf_date = item["createdDate"]
+        pdf_url = item["alternateLink"]
+        processed_table.insert("", "end", values=(pdf_title, pdf_date))
 
-KARTU_PENGAMBILAN_PENCAMPURAN_BAHAN_OPTIONS = [
-    "Kartu lengkap dan update",
-    "Kartu lengkap, terlambat 1 hari",
-    "Kartu lengkap, terlambat > 2 hari",
-    "Kartu tidak lengkap, terlambat 1 hari",
-    "Kartu dan monitoring tidak ada"]
+    # Rejected Table
+    for i in rejected_table.get_children():
+        rejected_table.delete(i)
+        
+    for item in rejected_pdf_files:
+        pdf_title = item["title"]
+        pdf_date = item["createdDate"]
+        pdf_url = item["alternateLink"]
+        rejected_table.insert("", "end", values=(pdf_title, pdf_date))
 
-KALIBRASI_ALAT_NOZEL_OPTIONS = [
-    "Rutin dan tercatat",
-    "Rutin, tidak tercatat",
-    "Kurang rutin, tercatat",
-    "Tidak rutin, tercatat",
-    "Tidak pernah"]
+    # Approved Table
+    for i in approved_table.get_children():
+        approved_table.delete(i)
+        
+    for item in approved_pdf_files:
+        pdf_title = item["title"]
+        pdf_date = item["createdDate"]
+        pdf_url = item["alternateLink"]
+        approved_table.insert("", "end", values=(pdf_title, pdf_date))
 
-GELAS_UKUR_PERKAKAS_PERBAIKAN_ALAT_SEMPROT_OPTIONS = [
-    "Gelas ukur terkalibrasi, alat perbaikan lengkap",
-    "Gelas ukur terkalibrasi, alat perbaikan tidak lengkap",
-    "Gelas ukur tidak terkalibrasi, alat perbaikan lengkap",
-    "Gelas ukur tidak terkalibrasi, alat perbaikan tidak lengkap",
-    "Tidak membawa alat takaran dan alat perbaikan"]
 
-PELETAKAN_ALAT_SEMPROT_OPTIONS = [
-    "Semua alat dan tercatat",
-    "Semua alat, tidak tercatat",
-    "Sebagian alat saja dan tercatat",
-    "Sebagian alat saja, tidak tercatat",
-    "Tidak ada gudang dan pencatatan"]
 
-APD_PEKERJA_RANK = [
-    "Lengkap",
-    "Kurang dari 1 item",
-    "Kurang dari 2 item",
-    "Kurang dari 3 item",
-    "Tidak ada APD"]
+# %%
+def approve_selected_pdf(pdf_id, PDF_PROCESSED_FOLDER_ID, PDF_APPROVED_FOLDER_ID):
 
-YEARLY_WEIGHT_PRODUCTION = {
-    "Pencapaian Produksi": {"2025": "20%", "2026": "18%", "2027": "15%"},
-    "Kualitas Panen - TBS Tertinggal": {"2025": "15%", "2026": "13%", "2027": "12%"},
-    "Kualitas Panen - LF Tertinggal": {"2025": "15%", "2026": "13%", "2027": "12%"},
-    "Kualitas Transport - Jjg di TPH": {"2025": "5%", "2026": "8%", "2027": "4%"},
-    "Kualitas Transport - LF di TPH": {"2025": "10%", "2026": "8%", "2027": "4%"},
-    "Rotasi Panen": {"2025": "15%", "2026": "13%", "2027": "12%"},
-    "Restan": {"2025": "8%", "2026": "10%", "2027": "10%"},
-    "Pemakaian Jaring/Terpal": {"2025": "3%", "2026": "5%", "2027": "5%"},
-    "Kualitas Panen - TBS Busuk Tinggal": {"2025": "10%", "2026": "13%", "2027": "12%"},
-    "Produktivitas Pemanen": {"2025": "0%", "2026": "7%", "2027": "4%"},
-    "Administrasi Panen": {"2025": "0%", "2026": "5%", "2027": "5%"},
-    "Kualitas TBS": {"2025": "0%", "2026": "0%", "2027": "12%"},
-    "Muatan Overload": {"2025": "0%", "2026": "0%", "2027": "5%"},
-}
+    if not pdf_id:
+        messagebox.showerror("Error", "No PDF selected to approve.")
+        return
 
-YEARLY_WEIGHT_NURSERY = {
-    "Kondisi Circle, Path dan TPH": {"2025": "20%", "2026": "18%", "2027": "15%"},
-    "Kondisi Gawangan": {"2025": "18%", "2026": "15%", "2027": "12%"},
-    "Titi Panen": {"2025": "8%", "2026": "10%", "2027": "10%"},
-    "Jalan & Jembatan": {"2025": "8%", "2026": "10%", "2027": "10%"},
-    "Pruning dan Sanitasi": {"2025": "18%", "2026": "15%", "2027": "15%"},
-    "Susunan Pelepah": {"2025": "10%", "2026": "10%", "2027": "8%"},
-    "Hama Penyakit": {"2025": "10%", "2026": "10%", "2027": "10%"},
-    "Beneficial Plant": {"2025": "3%", "2026": "3%", "2027": "5%"},
-    "Peilscale": {"2025": "5%", "2026": "5%", "2027": "5%"},
-    "Cover Crop (Neprolepis sp.)": {"2025": "0%", "2026": "2%", "2027": "5%"},
-    "Barn Owl": {"2025": "0%", "2026": "2%", "2027": "5%"},
-}
+    try:
+        # Add the "Approved" logo into the PDF on Drive (if possible) before moving it
+        try:
+            add_approved_logo_to_drive_pdf(pdf_id, APPROVED_LOGO)
+        except Exception as e:
+            # Non-fatal: log and continue to move the file
+            print(f"Warning: could not add approved logo before moving: {e}")
 
-YEARLY_WEIGHT_FERTILIZER = {
-    "Pokok Tidak Terpupuk": {"2025": "20%", "2026": "18%", "2027": "18%"},
-    "Kondisi Piringan / Gawangan": {"2025": "15%", "2026": "15%", "2027": "15%"},
-    "Cara Aplikasi": {"2025": "12%", "2026": "10%", "2027": "10%"},
-    "Keseragaman Alat Tabur": {"2025": "12%", "2026": "10%", "2027": "10%"},
-    "Kesesuaian Dosis Alat Tabur": {"2025": "10%", "2026": "10%", "2027": "10%"},
-    "Tenaga Pemupuk": {"2025": "5%", "2026": "5%", "2027": "5%"},
-    "Supervisi": {"2025": "6%", "2026": "5%", "2027": "5%"},
-    "Terdapat Pemeriksaan Ancak Pemupukan": {"2025": "5%", "2026": "5%", "2027": "5%"},
-    "Jadwal Pemupukan": {"2025": "5%", "2026": "5%", "2027": "5%"},
-    "APD Pekerja": {"2025": "5%", "2026": "5%", "2027": "5%"},
-    "Fisik Pupuk": {"2025": "5%", "2026": "3%", "2027": "3%"},
-    "Peletakan Pupuk": {"2025": "0%", "2026": "3%", "2027": "3%"},
-    "Pupuk Tercecer": {"2025": "0%", "2026": "3%", "2027": "3%"},
-    "Pengembalian Karung": {"2025": "0%", "2026": "3%", "2027": "3%"},
-}
+        move_file_between_folders(pdf_id, PDF_PROCESSED_FOLDER_ID, PDF_APPROVED_FOLDER_ID)
+        show_success_window()
+        toggle_pdf_report_button_visibility()
+        pdf_display_area.config(text=f"Select a PDF to preview")
+        refresh_table()
 
-YEARLY_WEIGHT_CHEMIST = {
-    "Kematian Gulma": {"2025": "22%", "2026": "22%", "2027": "20%"},
-    "Pokok Tersemprot": {"2025": "5%", "2026": "5%", "2027": "5%"},
-    "Bahan Herbisida yang Dibawa ke Ancak": {"2025": "10%", "2026": "10%", "2027": "10%"},
-    "Kondisi Alat Semprot": {"2025": "10%", "2026": "10%", "2027": "10%"},
-    "Keseragaman Nozel": {"2025": "10%", "2026": "8%", "2027": "8%"},
-    "Dosis per Knapsack Sesuai Standar Kalibrasi": {"2025": "7%", "2026": "7%", "2027": "7%"},
-    "Program Pengendalian Gulma": {"2025": "7%", "2026": "7%", "2027": "7%"},
-    "Penggunaan HK Sesuai Norma Pekerjaan": {"2025": "7%", "2026": "7%", "2027": "7%"},
-    "APD Pekerja": {"2025": "5%", "2026": "5%", "2027": "5%"},
-    "Kotak P3K Isi Lengkap dan Dibawa Oleh Mandor": {"2025": "0%", "2026": "4%", "2027": "5%"},
-    "Terdapat Kartu Pengambilan dan Pencampuran Bahan": {"2025": "5%", "2026": "4%", "2027": "4%"},
-    "Terdapat Kalibrasi Alat dan Nozel": {"2025": "5%", "2026": "4%", "2027": "4%"},
-    "Membawa Gelas Ukur & Perkakas Perbaikan Alat Semprot": {"2025": "5%", "2026": "5%", "2027": "5%"},
-    "Peletakan Alat Semprot": {"2025": "2%", "2026": "2%", "2027": "3%"},
-}
+    except Exception as e:
+        messagebox.showerror("Error", f"Gagal memindahkan PDF ke folder Approved: {e}")
 
-QA_TYPE = ["QA Produksi", "QA Perawatan", "QA Pemupukan", "QA Chemist"]
 
-AVAILABLE_YEAR = ["2025", "2026", "2027"]
+# %%
+def decline_selected_pdf(pdf_id, PDF_PROCESSED_FOLDER_ID, PDF_REJECTED_FOLDER_ID):
 
-FERTILIZER_TYPE = ["NPK 13", "NPK 15", "NPK 12", "Dolomite", "Urea", "MOP", "HGFB", "CuSO4", "Zincop Chelated", "Kieserite", "RP", "Kaptan", "TSP"]
+    if not pdf_id:
+        messagebox.showerror("Error", "No PDF selected to decline.")
+        return
 
-# --- Timezone ---
-CURRENT_TIMEZONE = pytz.timezone('Asia/Jakarta')
+    try:
+        move_file_between_folders(pdf_id, PDF_PROCESSED_FOLDER_ID, PDF_REJECTED_FOLDER_ID)
+        show_success_window()
+        toggle_pdf_report_button_visibility()
+        pdf_display_area.config(text=f"Select a PDF to preview")
+        refresh_table()
 
-photos_data = []  # list of {"path": ..., "note": ..., "widgets": ...}
-pdf_data = []
+    except Exception as e:
+        messagebox.showerror("Error", f"Gagal memindahkan PDF ke folder Rejected: {e}")
 
 # %% [markdown]
 #  ## 4. Global Variables (Application State)
@@ -2343,7 +2591,7 @@ def submit_production_analysis():
     generate_pdf_output(final_qa_score, final_qa_nilai, combobox_menu_qa.get(), input_data)
 
     # Upload PDF to Google Drive
-    process_uploaded_pdf()
+    upload_pdf_to_drive()
 
     # Clear cached photos data
     photos_data.clear()
@@ -2621,7 +2869,7 @@ def submit_nursery_analysis():
     generate_pdf_output(final_qa_score, final_qa_nilai, combobox_menu_qa.get(), converted_input)
 
     # Upload PDF to Google Drive
-    process_uploaded_pdf()
+    upload_pdf_to_drive()
 
     # Clear cached photos data
     photos_data.clear()
@@ -2968,7 +3216,7 @@ def submit_fertilizer_analysis():
     generate_pdf_output(final_qa_score, final_qa_nilai, combobox_menu_qa.get(), converted_input)
 
     # Upload PDF to Google Drive
-    process_uploaded_pdf()
+    upload_pdf_to_drive()
 
     # Clear cached photos data
     photos_data.clear()
@@ -3320,7 +3568,7 @@ def submit_chemist_analysis():
     generate_pdf_output(final_qa_score, final_qa_nilai, combobox_menu_qa.get(), converted_input)
 
     # Upload PDF to Google Drive
-    process_uploaded_pdf()
+    upload_pdf_to_drive()
 
     # Clear cached photos data
     photos_data.clear()
@@ -3495,8 +3743,7 @@ def goto_chosen_qa_menu():
 # %%
 def goto_processed_pdf():
     global username, previous_menu, \
-        df_mobile_produksi_input, df_mobile_perawatan_input, df_mobile_pemupukan_input, df_mobile_chemist_input, df_input, df_output, df_output_weight, \
-        available_estate_list, available_divisi_list, available_blok_list
+        processed_pdf_files, rejected_pdf_files, approved_pdf_files 
 
     if not root_exists: return
 
@@ -3519,9 +3766,7 @@ def goto_processed_pdf():
 
     # 3. Read all the processed PDF files from google drive
     try:
-        processed_pdf_files = fetch_processed_pdfs(PDF_PROCESSED_FOLDER_ID)
-        rejected_pdf_files = fetch_processed_pdfs(PDF_REJECTED_FOLDER_ID)
-        approved_pdf_files = fetch_processed_pdfs(PDF_APPROVED_FOLDER_ID)
+        processed_pdf_files, rejected_pdf_files, approved_pdf_files = fetch_pdfs()
         
     except Exception as e:
         messagebox.showerror("Error", f"Gagal memuat data PDF: {e}")
@@ -5023,9 +5268,12 @@ def update_blok_combobox():
 
 # %%
 def processed_pdfs(processed_pdf_files, rejected_pdf_files, approved_pdf_files):
-    global processed_table, \
+    global pdf_id, \
+    processed_table, \
     rejected_table, \
     approved_table, \
+    button_approve, \
+    button_decline, \
     back_button, \
     current_menu, \
     pdf_display_area
@@ -5035,6 +5283,7 @@ def processed_pdfs(processed_pdf_files, rejected_pdf_files, approved_pdf_files):
 
     hide_all_widgets()
     current_menu = "processed_pdfs"
+    pdf_id = ""
 
     # === SCROLLABLE CONTAINER ===
     outer_frame = tk.Frame(root)
@@ -5059,19 +5308,7 @@ def processed_pdfs(processed_pdf_files, rejected_pdf_files, approved_pdf_files):
         processed_table.column(col, anchor="center", width=180)
     processed_table.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
     row += 1
-
-    for i in processed_table.get_children():
-        processed_table.delete(i)
-        
-    for item in processed_pdf_files:
-        pdf_title = item["title"]
-        pdf_date = item["createdDate"]
-        pdf_url = item["alternateLink"]  # Asumsikan ini adalah URL Google Drive file PDF
-        processed_table.insert("", "end", values=(pdf_title, pdf_date))
-
-    # Mengikat event <<TreeviewSelect>> untuk menangkap pilihan baris
-    processed_table.bind("<<TreeviewSelect>>", lambda event: display_pdf(event, processed_pdf_files, "Processed"))
-
+    
     # Rejected pdfs
     label_rejected_pdfs = make_label(parent=scrollable_frame, text="Rejected PDF", row=row, font=("Arial", 16, "bold"))
     row += 1
@@ -5082,18 +5319,10 @@ def processed_pdfs(processed_pdf_files, rejected_pdf_files, approved_pdf_files):
         rejected_table.column(col, anchor="center", width=180)
     rejected_table.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
     row += 1
-
-    for i in rejected_table.get_children():
-        rejected_table.delete(i)
-        
-    for item in rejected_pdf_files:
-        pdf_title = item["title"]
-        pdf_date = item["createdDate"]
-        pdf_url = item["alternateLink"]  # Asumsikan ini adalah URL Google Drive file PDF
-        rejected_table.insert("", "end", values=(pdf_title, pdf_date))
-
+    
     # Mengikat event <<TreeviewSelect>> untuk menangkap pilihan baris
-    rejected_table.bind("<<TreeviewSelect>>", lambda event: display_pdf(event, rejected_pdf_files, "Rejected"))
+    # Pass None for pdf_files so display_pdf will use the up-to-date global lists
+    rejected_table.bind("<<TreeviewSelect>>", lambda event: display_pdf(event, None, "Rejected"))
 
     # Approved pdfs
     label_approved_pdfs = make_label(parent=scrollable_frame, text="Approved PDF", row=row, font=("Arial", 16, "bold"))
@@ -5105,25 +5334,36 @@ def processed_pdfs(processed_pdf_files, rejected_pdf_files, approved_pdf_files):
         approved_table.column(col, anchor="center", width=180)
     approved_table.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
     row += 1
-
-    for i in approved_table.get_children():
-        approved_table.delete(i)
-        
-    for item in approved_pdf_files:
-        pdf_title = item["title"]
-        pdf_date = item["createdDate"]
-        pdf_url = item["alternateLink"]  # Asumsikan ini adalah URL Google Drive file PDF
-        approved_table.insert("", "end", values=(pdf_title, pdf_date))
-
+    
     # Mengikat event <<TreeviewSelect>> untuk menangkap pilihan baris
-    approved_table.bind("<<TreeviewSelect>>", lambda event: display_pdf(event, approved_pdf_files, "Approved"))
+    # Pass None for pdf_files so display_pdf will use the up-to-date global lists
+    approved_table.bind("<<TreeviewSelect>>", lambda event: display_pdf(event, None, "Approved"))
 
-    # Tempat untuk menampilkan PDF di bawah tabel
+    # Untuk menampilkan PDF yang sedang direview
     pdf_display_area = tk.Label(scrollable_frame, text="Select a PDF to preview", font=("Arial", 12))
     pdf_display_area.grid(row=row, column=0, padx=10, pady=10, sticky="w")
+    row += 1
+
+    button_approve = make_button(scrollable_frame, text="Approve", row=row, command=lambda: [approve_selected_pdf(pdf_id, PDF_PROCESSED_FOLDER_ID, PDF_APPROVED_FOLDER_ID)], font=("Arial", 10), bg=PRIMARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
+    row += 1
+    
+    button_decline = make_button(scrollable_frame, text="Decline", row=row, command=lambda: [decline_selected_pdf(pdf_id, PDF_PROCESSED_FOLDER_ID, PDF_REJECTED_FOLDER_ID)], font=("Arial", 10), bg=EXIT_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
+    row += 1
 
     back_button = make_button(scrollable_frame, text="Back", row=row+1, command=go_back, font=("Arial", 10), bg=SECONDARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
     row += 1
+
+    global conditional_widgets
+    conditional_widgets = [
+        button_approve,
+        button_decline
+    ]
+
+    # Mengikat event <<TreeviewSelect>> untuk menangkap pilihan baris di processed table & menampilkan button approve/decline
+    # Don't pass a snapshot of processed_pdf_files (it may become stale after refresh).
+    processed_table.bind("<<TreeviewSelect>>", lambda event: (display_pdf(event, None, "Processed"), toggle_pdf_report_button_visibility()))
+    toggle_pdf_report_button_visibility()
+    refresh_table()
 
 # %%
 def qa_calculate_production():
