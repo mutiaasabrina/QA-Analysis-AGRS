@@ -46,6 +46,14 @@ import fitz
 #  ## 2. Configuration and Constants
 
 # %%
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+# %%
 # --- Authentication ---
 JSON_PATH = resource_path('enginewaktuaplikasipemupukan-03e33861bae9.json')
 # SHEET_URL = "https://docs.google.com/spreadsheets/d/1yCrPTPT6xVMEAYs7d31Vya0GhxQ_AySbfg-CXD7UaMw/edit?usp=sharing"
@@ -409,14 +417,6 @@ def set_username():
     global username, username_var
     if username_var:
         username = username_var.get()
-
-# %%
-def resource_path(relative_path):
-    try:
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
 
 # %%
 def is_valid_date(date_str):
@@ -865,7 +865,7 @@ def process_uploaded_photos():
         messagebox.showinfo("Berhasil", "Foto berhasil diupload ke Google Drive.")
 
 # %%
-def upload_pdf_to_drive():
+def proceed_to_upload_pdf():
     global pdf_data
     
     for item in pdf_data:
@@ -2031,8 +2031,7 @@ def evaluate_keseragaman_nozel(total_nozel_seragam, total_tenaga_semprot):
         return 2
 
 # %%
-def evaluate_dosis_knapsack(uji_petik_sesuai, uji_petik_aktif):
-    perhitungan_dosis_knapsack = (uji_petik_sesuai / uji_petik_aktif) * 100
+def evaluate_dosis_knapsack(perhitungan_dosis_knapsack):
 
     if perhitungan_dosis_knapsack >= 100:  # > 100%
         return 10
@@ -2089,8 +2088,7 @@ def analyse_qa_chemist(
         total_alat_semprot_tidak_layak,
         total_nozel_seragam,
         total_nozel_tidak_seragam,
-        uji_petik_aktif,
-        uji_petik_sesuai,
+        kesesuaian_kalibrasi_dosis,
         score_pengendalian_gulma,
         score_p3k,
         score_apd_pekerja,
@@ -2123,7 +2121,7 @@ def analyse_qa_chemist(
 
     score_kondisi_keseragaman_nozel = evaluate_keseragaman_nozel(total_nozel_seragam, total_tenaga_semprot)
 
-    score_kondisi_standard_dosis_knapsack = evaluate_dosis_knapsack(uji_petik_sesuai, uji_petik_aktif)
+    score_kondisi_standard_dosis_knapsack = evaluate_dosis_knapsack(kesesuaian_kalibrasi_dosis)
 
     score_kondisi_penggunaan_hk = evaluate_penggunaan_hk(tipe_chemist, score_kematian_gulma, total_tenaga_semprot, luas)
     
@@ -2591,7 +2589,7 @@ def submit_production_analysis():
     generate_pdf_output(final_qa_score, final_qa_nilai, combobox_menu_qa.get(), input_data)
 
     # Upload PDF to Google Drive
-    upload_pdf_to_drive()
+    proceed_to_upload_pdf()
 
     # Clear cached photos data
     photos_data.clear()
@@ -2869,7 +2867,7 @@ def submit_nursery_analysis():
     generate_pdf_output(final_qa_score, final_qa_nilai, combobox_menu_qa.get(), converted_input)
 
     # Upload PDF to Google Drive
-    upload_pdf_to_drive()
+    proceed_to_upload_pdf()
 
     # Clear cached photos data
     photos_data.clear()
@@ -3079,9 +3077,9 @@ def submit_fertilizer_analysis():
     cara_aplikasi_standar = filtered_df["Cara Aplikasi Standar"].sum()
     cara_aplikasi_tidak_standar = filtered_df["Cara Aplikasi Tidak Standar"].sum()
     total_cara_aplikasi = cara_aplikasi_standar + cara_aplikasi_tidak_standar
-    # total_alat_tabur = filtered_df["Total Alat Tabur"].sum() # commented this since we're using the new flow to reduce the duplicate
-    # total_alat_tabur_seragam = filtered_df["Alat Tabur Seragam"].sum() # commented this since we're using the new flow to reduce the duplicate
-    # total_alat_tabur_tidak_seragam = filtered_df["Alat Tabur Tidak Seragam"].sum() # commented this since we're using the new flow to reduce the duplicate
+    total_alat_tabur = filtered_df["Total Alat Tabur"].sum()
+    total_alat_tabur_seragam = filtered_df["Alat Tabur Seragam"].sum()
+    total_alat_tabur_tidak_seragam = filtered_df["Alat Tabur Tidak Seragam"].sum()
     total_dosis_sesuai = filtered_df["Total Dosis Sesuai"].sum()
     total_dosis_tidak_sesuai = filtered_df["Total Dosis Tidak Sesuai"].sum()
     total_dosis = total_dosis_sesuai + total_dosis_tidak_sesuai
@@ -3108,21 +3106,23 @@ def submit_fertilizer_analysis():
             worst_index = idx
             worst_apd = apd
 
+    # Commented this since we're using the new flow to reduce the duplicate
     # Hitung daftar alat & total pekerja dari tenaga tabur
-    filtered_df['Daftar Tenaga Tabur Dict'] = filtered_df['Daftar Tenaga Tabur'].apply(lambda x: json.loads(x) if isinstance(x, str) else x)
-    daftar_tenaga_tabur = [person for sublist in filtered_df['Daftar Tenaga Tabur Dict'] for person in sublist]
+    # filtered_df['Daftar Tenaga Tabur Dict'] = filtered_df['Daftar Tenaga Tabur'].apply(lambda x: json.loads(x) if isinstance(x, str) else x)
+    # daftar_tenaga_tabur = [person for sublist in filtered_df['Daftar Tenaga Tabur Dict'] for person in sublist]
+    # print(daftar_tenaga_tabur)
 
-    temp_df = pd.DataFrame(daftar_tenaga_tabur)
-    temp_df.drop_duplicates(subset='tenagaTabur', inplace=True)
+    # temp_df = pd.DataFrame(daftar_tenaga_tabur)
+    # temp_df.drop_duplicates(subset='tenagaTabur', inplace=True)
 
-    temp_df['jumlah'] = pd.to_numeric(temp_df['jumlah'], errors='coerce')
-    temp_df['seragam'] = pd.to_numeric(temp_df['seragam'], errors='coerce')
-    temp_df['tidakSeragam'] = pd.to_numeric(temp_df['tidakSeragam'], errors='coerce')
+    # temp_df['jumlah'] = pd.to_numeric(temp_df['jumlah'], errors='coerce')
+    # temp_df['seragam'] = pd.to_numeric(temp_df['seragam'], errors='coerce')
+    # temp_df['tidakSeragam'] = pd.to_numeric(temp_df['tidakSeragam'], errors='coerce')
 
-    total_tenaga_pemupuk = temp_df.shape[0]
-    total_alat_tabur = temp_df['jumlah'].sum()
-    total_alat_tabur_seragam = temp_df['seragam'].sum()
-    total_alat_tabur_tidak_seragam = temp_df['tidakSeragam'].sum()
+    # total_tenaga_pemupuk = temp_df.shape[0]
+    # total_alat_tabur = temp_df['jumlah'].sum()
+    # total_alat_tabur_seragam = temp_df['seragam'].sum()
+    # total_alat_tabur_tidak_seragam = temp_df['tidakSeragam'].sum()
 
     # Convert combobox option to float
     score_tenaga_pemupuk = convert_tenaga_pemupuk_to_score(jenis_tenaga_pemupuk)
@@ -3216,7 +3216,7 @@ def submit_fertilizer_analysis():
     generate_pdf_output(final_qa_score, final_qa_nilai, combobox_menu_qa.get(), converted_input)
 
     # Upload PDF to Google Drive
-    upload_pdf_to_drive()
+    proceed_to_upload_pdf()
 
     # Clear cached photos data
     photos_data.clear()
@@ -3400,8 +3400,8 @@ def submit_chemist_analysis():
     tanggal_semprot = filtered_df["Tanggal Semprot"].iloc[0]
     dosis_knapsack = filtered_df["Dosis Knapsack"].iloc[0]
     luas = filtered_df["Luas"].sum()
-    # total_tenaga_semprot = filtered_df["Total Tenaga Kerja"].sum()
-    pokok_sample = filtered_df["Jumlah Pokok"].sum()
+    total_tenaga_semprot = filtered_df["Total Tenaga Kerja"].sum()
+    # pokok_sample = filtered_df["Jumlah Pokok"].sum()
     tipe_chemist = filtered_df["Chemist"].iloc[0]
     pokok_gulma = filtered_df["Jumlah Pokok Gulma"].sum()
     kematian_gulma_circle = filtered_df["Total Gulma Circle Mati"].sum()
@@ -3410,20 +3410,22 @@ def submit_chemist_analysis():
     kematian_gulma_gawangan = filtered_df["Total Gulma Gawangan Mati"].sum()
     pokok_tersemprot = filtered_df["Total Pokok Tersemprot"].sum()
     pokok_tidak_tersemprot = filtered_df["Total Pokok Tidak Tersemprot"].sum()
+    pokok_sample = pokok_tersemprot + pokok_tidak_tersemprot
     bahan_herbisida = filtered_df["Bahan Herbisida"].iloc[0]
     # total_alat_semprot_layak = filtered_df["Total Alat Semprot Baik"].sum()
     # total_alat_semprot_tidak_layak = filtered_df["Total Alat Semprot Tidak Layak"].sum()
     # total_nozel_seragam = filtered_df["Total Nozel Seragam"].sum()
     # total_nozel_tidak_seragam = filtered_df["Total Nozel Tidak Seragam"].sum()
-    uji_petik_aktif = filtered_df["Total Uji Petik Aktif"].sum()
-    uji_petik_tidak_aktif = filtered_df["Total Uji Petik Nonaktif"].sum()
-    uji_petik_sesuai = filtered_df["Total Uji Petik Sesuai"].sum()
-    uji_petik_tidak_sesuai = filtered_df["Total Uji Petik Tidak Sesuai"].sum()
+    # uji_petik_aktif = filtered_df["Total Uji Petik Aktif"].sum()
+    # uji_petik_tidak_aktif = filtered_df["Total Uji Petik Nonaktif"].sum()
+    # uji_petik_sesuai = filtered_df["Total Uji Petik Sesuai"].sum()
+    # uji_petik_tidak_sesuai = filtered_df["Total Uji Petik Tidak Sesuai"].sum()
     program_pengendalian_gulma = filtered_df["Program Pengendalian Gulma"].iloc[0]
     kartu_pengambilan_campuran = filtered_df["Kartu Pengambilan Pencampuran"].iloc[0]
     kalibrasi_alat_nozel = filtered_df["Kalibrasi Alat Nozel"].iloc[0]
     gelas_ukur_perkakas = filtered_df["Gelas Ukur Perkakas"].iloc[0]
     peletakkan_alat_semprot = filtered_df["Peletakan Alat Semprot"].iloc[0]
+    kesesuaian_kalibrasi_dosis = filtered_df["Kesesuaian Kalibrasi Dosis"].iloc[0]
 
     # Rank apd paling jelek
     apd_pekerja = filtered_df["Apd Pekerja"]
@@ -3447,24 +3449,17 @@ def submit_chemist_analysis():
     print(f"worst_apd: {worst_apd}")
 
     # Hitung kelayakan alat semprot, nozel & total pekerja dari tenaga semprot
-    filtered_df['Daftar Tenaga Semprot Dict'] = filtered_df['Daftar Tenaga Semprot'].apply(lambda x: json.loads(x) if isinstance(x, str) else x)
-    daftar_tenaga_semprot = [person for sublist in filtered_df['Daftar Tenaga Semprot Dict'] for person in sublist]
+    # filtered_df['Daftar Tenaga Semprot Dict'] = filtered_df['Daftar Tenaga Semprot'].apply(lambda x: json.loads(x) if isinstance(x, str) else x)
+    # daftar_tenaga_semprot = [person for sublist in filtered_df['Daftar Tenaga Semprot Dict'] for person in sublist]
 
-    temp_df = pd.DataFrame(daftar_tenaga_semprot)
-    temp_df.drop_duplicates(subset='tenagaSemprot', inplace=True)
+    # temp_df = pd.DataFrame(daftar_tenaga_semprot)
+    # temp_df.drop_duplicates(subset='tenagaSemprot', inplace=True)
     
-    total_tenaga_semprot = len(temp_df['tenagaSemprot'])
-    total_alat_semprot_layak = len(temp_df[temp_df['kondisiAlat'] == 'Baik dan Lancar'])
-    total_alat_semprot_tidak_layak = len(temp_df[temp_df['kondisiAlat'] == 'Tidak Baik'])
-    total_nozel_seragam = len(temp_df[temp_df['keseragamanNozel'] == 'Seragam'])
-    total_nozel_tidak_seragam = len(temp_df[temp_df['keseragamanNozel'] == 'Tidak Seragam'])
-
-    print(f"total_tenaga_semprot: {total_tenaga_semprot}")
-    print(f"total_alat_semprot_layak: {total_alat_semprot_layak}")
-    print(f"total_alat_semprot_tidak_layak: {total_alat_semprot_tidak_layak}")
-    print(f"total_nozel_seragam: {total_nozel_seragam}")
-    print(f"total_nozel_tidak_seragam: {total_nozel_tidak_seragam}")
-
+    # total_tenaga_semprot = len(temp_df['tenagaSemprot'])
+    # total_alat_semprot_layak = len(temp_df[temp_df['kondisiAlat'] == 'Baik dan Lancar'])
+    # total_alat_semprot_tidak_layak = len(temp_df[temp_df['kondisiAlat'] == 'Tidak Baik'])
+    # total_nozel_seragam = len(temp_df[temp_df['keseragamanNozel'] == 'Seragam'])
+    # total_nozel_tidak_seragam = len(temp_df[temp_df['keseragamanNozel'] == 'Tidak Seragam'])
     
     # Convert combobox option to float
     score_bahan_herbisida = convert_bahan_herbisida_to_score(bahan_herbisida)
@@ -3507,14 +3502,6 @@ def submit_chemist_analysis():
         "Total Gulma Gawangan Mati": kematian_gulma_gawangan,
         "Pokok Tersemprot": pokok_tersemprot,
         "Bahan Herbisida yang Dibawa ke Ancak": score_bahan_herbisida,
-        "Total Alat Semprot Baik": total_alat_semprot_layak,
-        "Total Alat Semprot Tidak Layak": total_alat_semprot_tidak_layak,
-        "Total Nozel Seragam": total_nozel_seragam,
-        "Total Nozel Tidak Seragam": total_nozel_tidak_seragam,
-        "Total Uji Petik Aktif": uji_petik_aktif,
-        "Total Uji Petik Nonaktif": uji_petik_tidak_aktif,
-        "Total Uji Petik Sesuai": uji_petik_sesuai,
-        "Total Uji Petik Tidak Sesuai": uji_petik_tidak_sesuai,
         "Program Pengendalian Gulma": score_pengendalian_gulma,
         "Kotak P3K Isi Lengkap dan Dibawa Oleh Mandor": score_p3k,
         "APD Pekerja": score_apd_pekerja,
@@ -3544,8 +3531,7 @@ def submit_chemist_analysis():
         total_alat_semprot_tidak_layak,
         total_nozel_seragam,
         total_nozel_tidak_seragam,
-        uji_petik_aktif,
-        uji_petik_sesuai,
+        kesesuaian_kalibrasi_dosis,
         score_pengendalian_gulma,
         score_p3k,
         score_apd_pekerja,
@@ -3568,7 +3554,7 @@ def submit_chemist_analysis():
     generate_pdf_output(final_qa_score, final_qa_nilai, combobox_menu_qa.get(), converted_input)
 
     # Upload PDF to Google Drive
-    upload_pdf_to_drive()
+    proceed_to_upload_pdf()
 
     # Clear cached photos data
     photos_data.clear()
@@ -4123,14 +4109,14 @@ def goto_chosen_data_overview_menu():
 # %%
 def generate_pdf_output(final_qa_scores, final_qa_nilai, combobox_menu_qa, input_data):
     global uploaded_photo_path, pdf_path, \
-        entry_keterangan_cpt, entry_keterangan_gawangan, entry_keterangan_titi_panen, \
-        entry_keterangan_jalan_jembatan, entry_keterangan_hama_penyakit, entry_keterangan_beneficial_plan, \
-        entry_keterangan_peilscale, entry_keterangan_cover_crop, entry_keterangan_barn_owl, \
-        entry_keterangan_pokok_tidak_terpupuk, entry_keterangan_piringan_gawangan, entry_keterangan_cara_aplikasi, \
-        entry_keterangan_alat_tabur_seragam, entry_keterangan_dosis_alat_tabur, entry_keterangan_tenaga_pemupuk, \
-        entry_keterangan_supervisi, entry_keterangan_pemeriksaan_ancak, entry_keterangan_jadwal_pemupukan, \
-        entry_keterangan_apd_pekerja, entry_keterangan_fisik_pupuk, entry_keterangan_peletakan_pupuk, \
-        entry_keterangan_pupuk_tercecer, entry_keterangan_pengembalian_karung, \
+        keterangan_cpt, keterangan_gawangan, keterangan_titi_panen, \
+        keterangan_jalan_jembatan, keterangan_hama_penyakit, keterangan_beneficial_plan, \
+        keterangan_peilscale, keterangan_cover_crop, keterangan_barn_owl, \
+        keterangan_tidak_terpupuk, keterangan_piringan_gawangan, keterangan_cara_aplikasi, \
+        keterangan_alat_tabur_seragam, keterangan_dosis_alat_tabur, keterangan_tenaga_pemupuk, \
+        keterangan_supervisi, keterangan_pemeriksaan_ancak, keterangan_jadwal_pemupukan, \
+        keterangan_apd_pekerja, keterangan_fisik_pupuk, keterangan_peletakan_pupuk, \
+        keterangan_pupuk_tercecer, keterangan_pengembalian_karung, \
         entry_keterangan_kematian_gulma, entry_keterangan_pokok_tersemprot, entry_keterangan_bahan_herbisida, \
         entry_keterangan_kondisi_alat_semprot, entry_keterangan_keseragaman_nozel, entry_keterangan_standard_dosis_knapsack, \
         entry_keterangan_pengendalian_gulma, entry_keterangan_penggunaan_hk, entry_keterangan_apd_pekerja, \
@@ -4208,7 +4194,17 @@ def generate_pdf_output(final_qa_scores, final_qa_nilai, combobox_menu_qa, input
     meta_y -= 30
     y = meta_y
     col1_x = margin                    # Deskripsi Penilaian
-    col2_x = col1_x + 200              # Score
+
+    # Score
+    if "Produksi" in combobox_menu_qa:
+        col2_x = col1_x + 200
+    elif "Perawatan" in combobox_menu_qa:
+        col2_x = col1_x + 150
+    elif "Pemupukan" in combobox_menu_qa:
+        col2_x = col1_x + 200
+    else:
+        col2_x = col1_x + 280
+    
     col3_x = col2_x + 55               # Nilai
     col4_x = col3_x + 55               # Keterangan
 
@@ -4309,59 +4305,59 @@ def generate_pdf_output(final_qa_scores, final_qa_nilai, combobox_menu_qa, input
 
         elif "Perawatan" in combobox_menu_qa:
             if key == "Kondisi Circle, Path dan TPH":
-                keterangan = f"{entry_keterangan_cpt.get()}"
+                keterangan = f"{keterangan_cpt:.2f} Kondisi CPT Baik"
             elif key == "Kondisi Gawangan":
-                keterangan = f"{entry_keterangan_gawangan.get()}"
+                keterangan = f"{keterangan_gawangan:.2f} Kondisi Gawangan Baik"
             elif key ==  "Titi Panen":
-                keterangan = f"{entry_keterangan_titi_panen.get()}"
+                keterangan = f"{keterangan_titi_panen}"
             elif key == "Jalan & Jembatan":
-                keterangan = f"{entry_keterangan_jalan_jembatan.get()}"
+                keterangan = f"{keterangan_jalan_jembatan}"
             elif key == "Pruning dan Sanitasi":
                 keterangan = f"{perhitungan_pruning:.2f}% Pruning Baik"
             elif key == "Susunan Pelepah":
                 keterangan = f"{perhitungan_susunan_pelepah:.2f}% Susunan Pelepah Baik"
             elif key == "Hama Penyakit":
-                keterangan = f"{entry_keterangan_hama_penyakit.get()}"
+                keterangan = f"{keterangan_hama_penyakit:.2f} Serangan Hama"
             elif key == "Beneficial Plant":
-                keterangan = f"{entry_keterangan_beneficial_plan.get()}"
+                keterangan = f"{keterangan_beneficial_plan}"
             elif key == "Peilscale":
-                keterangan = f"{entry_keterangan_peilscale.get()}"
+                keterangan = f"{keterangan_peilscale}"
             elif key == "Cover Crop (Neprolepis sp.)":
-                keterangan = f"{entry_keterangan_cover_crop.get()}"
+                keterangan = f"{keterangan_cover_crop}"
             elif key == "Barn Owl":
-                keterangan = f"{entry_keterangan_barn_owl.get()}"
+                keterangan = f"{keterangan_barn_owl}"
             else:
                 keterangan = ""
 
         elif "Pemupukan" in combobox_menu_qa:
             if key == "Pokok Tidak Terpupuk":
-                keterangan = f"{entry_keterangan_pokok_tidak_terpupuk.get()}"
+                keterangan = f"{keterangan_tidak_terpupuk:.2f} Pkk Tidak Terpupuk"
             elif key == "Kondisi Piringan / Gawangan":
-                keterangan = f"{entry_keterangan_piringan_gawangan.get()}"
+                keterangan = f"{keterangan_piringan_gawangan:.2f} Kondisi Piringan Baik"
             elif key ==  "Cara Aplikasi":
-                keterangan = f"{entry_keterangan_cara_aplikasi.get()}"
+                keterangan = f"{keterangan_cara_aplikasi:.2f} Aplikasi Standar"
             elif key == "Keseragaman Alat Tabur":
-                keterangan = f"{entry_keterangan_alat_tabur_seragam.get()}"
+                keterangan = f"{keterangan_alat_tabur_seragam:.2f} Alat Tabur Seragam"
             elif key == "Kesesuaian Dosis Alat Tabur":
-                keterangan = f"{entry_keterangan_dosis_alat_tabur.get()}"
+                keterangan = f"{keterangan_dosis_alat_tabur}"
             elif key == "Tenaga Pemupuk":
-                keterangan = f"{entry_keterangan_tenaga_pemupuk.get()}"
+                keterangan = f"{keterangan_tenaga_pemupuk}"
             elif key == "Supervisi":
-                keterangan = f"{entry_keterangan_supervisi.get()}"
+                keterangan = f"{keterangan_supervisi}"
             elif key == "Terdapat Pemeriksaan Ancak Pemupukan":
-                keterangan = f"{entry_keterangan_pemeriksaan_ancak.get()}"
+                keterangan = f"{keterangan_pemeriksaan_ancak}"
             elif key == "Jadwal Pemupukan":
-                keterangan = f"{entry_keterangan_jadwal_pemupukan.get()}"
+                keterangan = f"{keterangan_jadwal_pemupukan}"
             elif key == "APD Pekerja":
-                keterangan = f"{entry_keterangan_apd_pekerja.get()}"
+                keterangan = f"{keterangan_apd_pekerja}"
             elif key == "Fisik Pupuk":
-                keterangan = f"{entry_keterangan_fisik_pupuk.get()}"
+                keterangan = f"{keterangan_fisik_pupuk}"
             elif key == "Peletakan Pupuk":
-                keterangan = f"{entry_keterangan_peletakan_pupuk.get()}"
+                keterangan = f"{keterangan_peletakan_pupuk}"
             elif key == "Pupuk Tercecer":
-                keterangan = f"{entry_keterangan_pupuk_tercecer.get()}"
+                keterangan = f"{keterangan_pupuk_tercecer}"
             elif key == "Pengembalian Karung":
-                keterangan = f"{entry_keterangan_pengembalian_karung.get()}"
+                keterangan = f"{keterangan_pengembalian_karung}"
             else:
                 keterangan = ""
         
@@ -4463,7 +4459,7 @@ def generate_pdf_output(final_qa_scores, final_qa_nilai, combobox_menu_qa, input
 
     # Roles (titles under boxes)
     c.setFont("Helvetica", 10)
-    titles = ["Petugas QA", "Mdr 1 / Mdr Panen", "Asisten", "Manager"]
+    titles = ["Petugas QA", "Mdr 1 / Mdr Panen", "Asisten QA", "Head of Agromony Services"]
     for i, title in enumerate(titles):
         c.drawCentredString(x_start + col_width * (i + 0.5), y - 15, title)
 
@@ -4698,7 +4694,11 @@ def process_production_calculation(df_mobile_input):
 
 # %%
 def process_nursery_calculation(df_mobile_input):
-    global tree, diperiksa, pokok_sample
+    global tree, diperiksa, pokok_sample, \
+        keterangan_cpt, keterangan_gawangan, keterangan_titi_panen, \
+        keterangan_jalan_jembatan, keterangan_hama_penyakit, keterangan_beneficial_plan, \
+        keterangan_peilscale, keterangan_cover_crop, keterangan_barn_owl
+        
     if not is_widget_alive(tree):
         messagebox.showerror("Error", "Tabel hasil tidak tersedia.")
         return
@@ -4709,23 +4709,13 @@ def process_nursery_calculation(df_mobile_input):
     except ValueError as e:
         messagebox.showerror("Error", str(e))
         return
-    
-    # Ambil nilai input
+
+    # Validasi input kosong/None
     tanggal_str = entry_tanggal_qa_terakhir.get().strip()
     estate = selected_estate.get() if selected_estate else ""
     divisi = selected_divisi.get() if selected_divisi else ""
     blok = selected_blok.get() if selected_blok else ""
-    keterangan_cpt = entry_keterangan_cpt.get().strip() if entry_keterangan_cpt else ""
-    keterangan_gawangan = entry_keterangan_gawangan.get().strip() if entry_keterangan_gawangan else ""
-    keterangan_titi_panen = entry_keterangan_titi_panen.get().strip() if entry_keterangan_titi_panen else ""
-    keterangan_jalan_jembatan = entry_keterangan_jalan_jembatan.get().strip() if entry_keterangan_jalan_jembatan else ""
-    keterangan_hama_penyakit = entry_keterangan_hama_penyakit.get().strip() if entry_keterangan_hama_penyakit else ""
-    keterangan_beneficial_plan = entry_keterangan_beneficial_plan.get().strip() if entry_keterangan_beneficial_plan else ""
-    keterangan_peilscale = entry_keterangan_peilscale.get().strip() if entry_keterangan_peilscale else ""
-    keterangan_cover_crop = entry_keterangan_cover_crop.get().strip() if entry_keterangan_cover_crop else ""
-    keterangan_barn_owl = entry_keterangan_barn_owl.get().strip() if entry_keterangan_barn_owl else ""
 
-    # Validasi input kosong/None
     if not validate_required_fields({
         "Tanggal": tanggal_str,
         "Estate": estate,
@@ -4809,6 +4799,16 @@ def process_nursery_calculation(df_mobile_input):
         "Barn Owl": convert_barn_owl_to_score(barn_owl),
     }
 
+    keterangan_cpt = (((circle_baik/pokok_sample)+(path_baik/pokok_sample))/filtered_df.shape[0])*100
+    keterangan_gawangan = (((lalang_tidak_ada/pokok_sample)+(anak_kayu_tidak_ada/pokok_sample)+(perumpung_tidak_ada/pokok_sample)+(purun_tikus_tidak_ada/pokok_sample)+(pakis_udang_tidak_ada/pokok_sample))/filtered_df.shape[0])*100
+    keterangan_titi_panen = titi_panen
+    keterangan_jalan_jembatan = jalan_jembatan
+    keterangan_hama_penyakit = (((serangan_tikus_ada/pokok_sample)+(serangan_rayap_ada/pokok_sample)+(serangan_thirathaba_ada/pokok_sample)+(serangan_updks_ada/pokok_sample))/filtered_df.shape[0])*100
+    keterangan_beneficial_plan = beneficial_plant
+    keterangan_peilscale = peilscale
+    keterangan_cover_crop = entry_keterangan_cover_crop.get().strip() if entry_keterangan_cover_crop else ""
+    keterangan_barn_owl = entry_keterangan_barn_owl.get().strip() if entry_keterangan_barn_owl else ""
+
     # Dapatkan bobot tahun
     year = combobox_chosen_year.get()
     weights = extract_weights_by_year(YEARLY_WEIGHT_NURSERY, year)
@@ -4818,9 +4818,9 @@ def process_nursery_calculation(df_mobile_input):
         nilai = score * weight
         
         if key == "Kondisi Circle, Path dan TPH":
-            ket = f"{keterangan_cpt}"
+            ket = f"{keterangan_cpt:.2f}% Kondisi CPT Baik"
         elif key == "Kondisi Gawangan":
-            ket = f"{keterangan_gawangan}"
+            ket = f"{keterangan_gawangan:.2f}% Kondisi Gawangan Baik"
         elif key ==  "Titi Panen":
             ket = f"{keterangan_titi_panen}"
         elif key == "Jalan & Jembatan":
@@ -4830,7 +4830,7 @@ def process_nursery_calculation(df_mobile_input):
         elif key == "Susunan Pelepah":
             ket = f"{perhitungan_susunan_pelepah:.2f}% Susunan Pelepah Baik"
         elif key == "Hama Penyakit":
-            ket = f"{keterangan_hama_penyakit}"
+            ket = f"{keterangan_hama_penyakit:.2f}% Serangan Hama"
         elif key == "Beneficial Plant":
             ket = f"{keterangan_beneficial_plan}"
         elif key == "Peilscale":
@@ -4857,7 +4857,13 @@ def process_nursery_calculation(df_mobile_input):
 
 # %%
 def process_fertilizer_calculation(df_mobile_input):
-    global tree, diperiksa, pokok_sample
+    global tree, diperiksa, pokok_sample, \
+        keterangan_tidak_terpupuk, keterangan_piringan_gawangan, keterangan_cara_aplikasi, \
+        keterangan_alat_tabur_seragam, keterangan_dosis_alat_tabur, keterangan_tenaga_pemupuk, \
+        keterangan_supervisi, keterangan_pemeriksaan_ancak, keterangan_jadwal_pemupukan, \
+        keterangan_apd_pekerja, keterangan_fisik_pupuk, keterangan_peletakan_pupuk, \
+        keterangan_pupuk_tercecer, keterangan_pengembalian_karung
+    
     if not is_widget_alive(tree):
         messagebox.showerror("Error", "Tabel hasil tidak tersedia.")
         return
@@ -4872,28 +4878,13 @@ def process_fertilizer_calculation(df_mobile_input):
     except ValueError as e:
         messagebox.showerror("Error", str(e))
         return
-    
-    # Ambil nilai input
+
+    # Validasi input kosong/None
     tanggal_str = entry_tanggal_qa_terakhir.get().strip()
     estate = selected_estate.get() if selected_estate else ""
     divisi = selected_divisi.get() if selected_divisi else ""
     blok = selected_blok.get() if selected_blok else ""
-    keterangan_tidak_terpupuk = entry_keterangan_pokok_tidak_terpupuk.get().strip() if entry_keterangan_pokok_tidak_terpupuk else ""
-    keterangan_piringan_gawangan = entry_keterangan_piringan_gawangan.get().strip() if entry_keterangan_piringan_gawangan else ""
-    keterangan_cara_aplikasi = entry_keterangan_cara_aplikasi.get().strip() if entry_keterangan_cara_aplikasi else ""
-    keterangan_alat_tabur_seragam = entry_keterangan_alat_tabur_seragam.get().strip() if entry_keterangan_alat_tabur_seragam else ""
-    keterangan_dosis_alat_tabur = entry_keterangan_dosis_alat_tabur.get().strip() if entry_keterangan_dosis_alat_tabur else ""
-    keterangan_tenaga_pemupuk = entry_keterangan_tenaga_pemupuk.get().strip() if entry_keterangan_tenaga_pemupuk else ""
-    keterangan_supervisi = entry_keterangan_supervisi.get().strip() if entry_keterangan_supervisi else ""
-    keterangan_pemeriksaan_ancak = entry_keterangan_pemeriksaan_ancak.get().strip() if entry_keterangan_pemeriksaan_ancak else ""
-    keterangan_jadwal_pemupukan = entry_keterangan_jadwal_pemupukan.get().strip() if entry_keterangan_jadwal_pemupukan else ""
-    keterangan_apd_pekerja = entry_keterangan_apd_pekerja.get().strip() if entry_keterangan_apd_pekerja else ""
-    keterangan_fisik_pupuk = entry_keterangan_fisik_pupuk.get().strip() if entry_keterangan_fisik_pupuk else ""
-    keterangan_peletakan_pupuk = entry_keterangan_peletakan_pupuk.get().strip() if entry_keterangan_peletakan_pupuk else ""
-    keterangan_pupuk_tercecer = entry_keterangan_pupuk_tercecer.get().strip() if entry_keterangan_pupuk_tercecer else ""
-    keterangan_pengembalian_karung = entry_keterangan_pengembalian_karung.get().strip() if entry_keterangan_pengembalian_karung else ""
-
-    # Validasi input kosong/None
+    
     if not validate_required_fields({
         "Tanggal": tanggal_str,
         "Estate": estate,
@@ -4935,6 +4926,8 @@ def process_fertilizer_calculation(df_mobile_input):
     total_alat_tabur = filtered_df["Total Alat Tabur"].sum()
     total_alat_tabur_seragam = filtered_df["Alat Tabur Seragam"].sum()
     total_alat_tabur_tidak_seragam = filtered_df["Alat Tabur Tidak Seragam"].sum()
+    total_uji_petik_aktif = filtered_df["Total Uji Petik Aktif"].sum()
+    total_uji_petik_non_aktif = filtered_df["Total Uji Petik Nonaktif"].sum()
     total_dosis_sesuai = filtered_df["Total Dosis Sesuai"].sum()
     total_dosis_tidak_sesuai = filtered_df["Total Dosis Tidak Sesuai"].sum()
     total_dosis = total_dosis_sesuai + total_dosis_tidak_sesuai
@@ -4985,6 +4978,21 @@ def process_fertilizer_calculation(df_mobile_input):
         "Pengembalian Karung": convert_pengembalian_karung_to_score(pengembalian_karung),
     }
 
+    keterangan_tidak_terpupuk = pokok_tidak_terpupuk
+    keterangan_piringan_gawangan = (kondisi_gawangan_baik/pokok_sample)*100
+    keterangan_cara_aplikasi = (cara_aplikasi_standar/pokok_sample)*100
+    keterangan_alat_tabur_seragam = (total_alat_tabur_seragam/total_alat_tabur)*100
+    keterangan_dosis_alat_tabur = f"Jumlah Uji Petik (Aktif): {total_uji_petik_aktif:.2f}, {((total_dosis_sesuai/total_uji_petik_aktif)*100):.2f}% Sesuai"
+    keterangan_tenaga_pemupuk = jenis_tenaga_pemupuk
+    keterangan_supervisi = entry_keterangan_supervisi.get().strip() if entry_keterangan_supervisi else ""
+    keterangan_pemeriksaan_ancak = pemeriksaan_ancak
+    keterangan_jadwal_pemupukan = entry_keterangan_jadwal_pemupukan.get().strip() if entry_keterangan_jadwal_pemupukan else ""
+    keterangan_apd_pekerja = worst_apd
+    keterangan_fisik_pupuk = fisik_pupuk
+    keterangan_peletakan_pupuk = peletakan_pupuk
+    keterangan_pupuk_tercecer = pupuk_tercecer
+    keterangan_pengembalian_karung = pengembalian_karung
+
     # Dapatkan bobot tahun
     year = combobox_chosen_year.get()
     weights = extract_weights_by_year(YEARLY_WEIGHT_FERTILIZER, year)
@@ -4995,13 +5003,13 @@ def process_fertilizer_calculation(df_mobile_input):
         nilai = score * weight
         
         if key == "Pokok Tidak Terpupuk":
-            ket = f"{keterangan_tidak_terpupuk}"
+            ket = f"{keterangan_tidak_terpupuk:.2f} Pkk Tidak Terpupuk"
         elif key == "Kondisi Piringan / Gawangan":
-            ket = f"{keterangan_piringan_gawangan}"
+            ket = f"{keterangan_piringan_gawangan:.2f}% Kondisi Piringan Baik"
         elif key ==  "Cara Aplikasi":
-            ket = f"{keterangan_cara_aplikasi}"
+            ket = f"{keterangan_cara_aplikasi:.2f}% Aplikasi Standar"
         elif key == "Keseragaman Alat Tabur":
-            ket = f"{keterangan_alat_tabur_seragam}"
+            ket = f"{keterangan_alat_tabur_seragam:.2f}% Alat Tabur Seragam"
         elif key == "Kesesuaian Dosis Alat Tabur":
             ket = f"{keterangan_dosis_alat_tabur}"
         elif key == "Tenaga Pemupuk":
@@ -5105,8 +5113,8 @@ def process_chemist_calculation(df_mobile_input):
     
     diperiksa = filtered_df["Nama Petugas"].iloc[0]
     luas = filtered_df["Luas"].sum()
-    # total_tenaga_semprot = filtered_df["Total Tenaga Kerja"].sum()
-    pokok_sample = filtered_df["Jumlah Pokok"].sum()
+    total_tenaga_semprot = filtered_df["Total Tenaga Kerja"].sum()
+    # pokok_sample = filtered_df["Jumlah Pokok"].sum()
     tipe_chemist = filtered_df["Chemist"].iloc[0]
     pokok_gulma = filtered_df["Jumlah Pokok Gulma"].sum()
     kematian_gulma_circle = filtered_df["Total Gulma Circle Mati"].sum()
@@ -5115,20 +5123,22 @@ def process_chemist_calculation(df_mobile_input):
     kematian_gulma_gawangan = filtered_df["Total Gulma Gawangan Mati"].sum()
     pokok_tersemprot = filtered_df["Total Pokok Tersemprot"].sum()
     pokok_tidak_tersemprot = filtered_df["Total Pokok Tidak Tersemprot"].sum()
+    pokok_sample = pokok_tersemprot + pokok_tidak_tersemprot
     bahan_herbisida = filtered_df["Bahan Herbisida"].iloc[0]
     # total_alat_semprot_layak = filtered_df["Total Alat Semprot Baik"].sum()
     # total_alat_semprot_tidak_layak = filtered_df["Total Alat Semprot Tidak Layak"].sum()
     # total_nozel_seragam = filtered_df["Total Nozel Seragam"].sum()
     # total_nozel_tidak_seragam = filtered_df["Total Nozel Tidak Seragam"].sum()
-    uji_petik_aktif = filtered_df["Total Uji Petik Aktif"].sum()
-    uji_petik_tidak_aktif = filtered_df["Total Uji Petik Nonaktif"].sum()
-    uji_petik_sesuai = filtered_df["Total Uji Petik Sesuai"].sum()
-    uji_petik_tidak_sesuai = filtered_df["Total Uji Petik Tidak Sesuai"].sum()
+    # uji_petik_aktif = filtered_df["Total Uji Petik Aktif"].sum()
+    # uji_petik_tidak_aktif = filtered_df["Total Uji Petik Nonaktif"].sum()
+    # uji_petik_sesuai = filtered_df["Total Uji Petik Sesuai"].sum()
+    # uji_petik_tidak_sesuai = filtered_df["Total Uji Petik Tidak Sesuai"].sum()
     program_pengendalian_gulma = filtered_df["Program Pengendalian Gulma"].iloc[0]
     kartu_pengambilan_campuran = filtered_df["Kartu Pengambilan Pencampuran"].iloc[0]
     kalibrasi_alat_nozel = filtered_df["Kalibrasi Alat Nozel"].iloc[0]
     gelas_ukur_perkakas = filtered_df["Gelas Ukur Perkakas"].iloc[0]
     peletakkan_alat_semprot = filtered_df["Peletakan Alat Semprot"].iloc[0]
+    kesesuaian_kalibrasi_dosis = filtered_df["Kesesuaian Kalibrasi Dosis"].iloc[0]
 
     # Rank apd paling jelek
     apd_pekerja = filtered_df["Apd Pekerja"]
@@ -5150,17 +5160,17 @@ def process_chemist_calculation(df_mobile_input):
             worst_apd = apd
 
     # Hitung kelayakan alat semprot, nozel & total pekerja dari tenaga semprot
-    filtered_df['Daftar Tenaga Semprot Dict'] = filtered_df['Daftar Tenaga Semprot'].apply(lambda x: json.loads(x) if isinstance(x, str) else x)
-    daftar_tenaga_semprot = [person for sublist in filtered_df['Daftar Tenaga Semprot Dict'] for person in sublist]
+    # filtered_df['Daftar Tenaga Semprot Dict'] = filtered_df['Daftar Tenaga Semprot'].apply(lambda x: json.loads(x) if isinstance(x, str) else x)
+    # daftar_tenaga_semprot = [person for sublist in filtered_df['Daftar Tenaga Semprot Dict'] for person in sublist]
 
-    temp_df = pd.DataFrame(daftar_tenaga_semprot)
-    temp_df.drop_duplicates(subset='tenagaSemprot', inplace=True)
+    # temp_df = pd.DataFrame(daftar_tenaga_semprot)
+    # temp_df.drop_duplicates(subset='tenagaSemprot', inplace=True)
     
-    total_tenaga_semprot = len(temp_df['tenagaSemprot'])
-    total_alat_semprot_layak = len(temp_df[temp_df['kondisiAlat'] == 'Baik dan Lancar'])
-    total_alat_semprot_tidak_layak = len(temp_df[temp_df['kondisiAlat'] == 'Tidak Baik'])
-    total_nozel_seragam = len(temp_df[temp_df['keseragamanNozel'] == 'Seragam'])
-    total_nozel_tidak_seragam = len(temp_df[temp_df['keseragamanNozel'] == 'Tidak Seragam'])
+    # total_tenaga_semprot = len(temp_df['tenagaSemprot'])
+    # total_alat_semprot_layak = len(temp_df[temp_df['kondisiAlat'] == 'Baik dan Lancar'])
+    # total_alat_semprot_tidak_layak = len(temp_df[temp_df['kondisiAlat'] == 'Tidak Baik'])
+    # total_nozel_seragam = len(temp_df[temp_df['keseragamanNozel'] == 'Seragam'])
+    # total_nozel_tidak_seragam = len(temp_df[temp_df['keseragamanNozel'] == 'Tidak Seragam'])
     
     # Hitung skor menggunakan fungsi yang sudah ada
     score_kematian_gulma = evaluate_kematian_gulma(tipe_chemist, kematian_gulma_circle, kematian_gulma_path, kematian_gulma_tph, kematian_gulma_gawangan, pokok_gulma)
@@ -5172,7 +5182,7 @@ def process_chemist_calculation(df_mobile_input):
         "Bahan Herbisida yang Dibawa ke Ancak": convert_bahan_herbisida_to_score(bahan_herbisida),
         "Kondisi Alat Semprot": evaluate_alat_semprot(total_alat_semprot_layak, total_tenaga_semprot),
         "Keseragaman Nozel": evaluate_keseragaman_nozel(total_nozel_seragam, total_tenaga_semprot),
-        "Dosis per Knapsack Sesuai Standar Kalibrasi": evaluate_dosis_knapsack(uji_petik_sesuai, uji_petik_aktif),
+        "Dosis per Knapsack Sesuai Standar Kalibrasi": evaluate_dosis_knapsack(kesesuaian_kalibrasi_dosis),
         "Program Pengendalian Gulma": convert_pengendalian_gulma_to_score(program_pengendalian_gulma),
         "Penggunaan HK Sesuai Norma Pekerjaan": evaluate_penggunaan_hk(tipe_chemist, score_kematian_gulma, total_tenaga_semprot, luas),
         "Kotak P3K Isi Lengkap dan Dibawa Oleh Mandor": convert_apd_pekerja_chemist_to_score(worst_apd),
@@ -5348,6 +5358,9 @@ def processed_pdfs(processed_pdf_files, rejected_pdf_files, approved_pdf_files):
     row += 1
     
     button_decline = make_button(scrollable_frame, text="Decline", row=row, command=lambda: [decline_selected_pdf(pdf_id, PDF_PROCESSED_FOLDER_ID, PDF_REJECTED_FOLDER_ID)], font=("Arial", 10), bg=EXIT_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
+    row += 1
+
+    back_button = make_button(scrollable_frame, text="Refresh Tables", row=row+1, command=refresh_table, font=("Arial", 10), bg=SECONDARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
     row += 1
 
     back_button = make_button(scrollable_frame, text="Back", row=row+1, command=go_back, font=("Arial", 10), bg=SECONDARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
@@ -5592,13 +5605,6 @@ def qa_calculate_nursery():
         label_divisi, selected_divisi, combobox_divisi, \
         label_blok, selected_blok, combobox_blok, \
         label_mandor, entry_mandor, \
-        label_circle_path_tph_title, label_keterangan_cpt, entry_keterangan_cpt, \
-        label_kondisi_gawangan_title, label_keterangan_gawangan, entry_keterangan_gawangan, \
-        label_titi_panen_title, label_keterangan_titi_panen, entry_keterangan_titi_panen, \
-        label_jalan_jembatan_title, label_keterangan_jalan_jembatan, entry_keterangan_jalan_jembatan, \
-        label_hama_penyakit_title, label_keterangan_hama_penyakit, entry_keterangan_hama_penyakit, \
-        label_beneficial_plan_title, label_keterangan_beneficial_plan, entry_keterangan_beneficial_plan, \
-        label_peilscale_title, label_keterangan_peilscale, entry_keterangan_peilscale, \
         label_cover_crop_title, label_cover_crop, entry_cover_crop, label_keterangan_cover_crop, entry_keterangan_cover_crop, \
         label_barn_owl_title, label_barn_owl, combobox_barn_owl, label_keterangan_barn_owl, entry_keterangan_barn_owl, \
         tree, \
@@ -5680,83 +5686,7 @@ def qa_calculate_nursery():
 
     entry_mandor = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
     row+=1
-
-    # Kondisi Circle, Path dan TPH 
-    label_circle_path_tph_title = make_label(parent=scrollable_frame, text="Kondisi Circle, Path dan TPH", row=row, font=("Arial", 14, "bold"))
-    row += 1
-
-    label_keterangan_cpt = make_label(parent=scrollable_frame, text="Opsional, masukkan keterangan Kondisi Circle, Path dan TPH:", row=row, font=("Arial", 12))
-    row += 1
-
-    entry_keterangan_cpt = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
-    row += 1
-
-    # Kondisi Gawangan
-    label_kondisi_gawangan_title = make_label(parent=scrollable_frame, text="Kondisi Gawangan", row=row, font=("Arial", 14, "bold"))
-    row += 1
-
-    label_keterangan_gawangan = make_label(parent=scrollable_frame, text="Opsional, masukkan keterangan Gawangan:", row=row, font=("Arial", 12))
-    row += 1
-
-    entry_keterangan_gawangan = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
-    row += 1
-
-    # Titi Panen
-    label_titi_panen_title = tk.Label(scrollable_frame, text="Titi Panen", font=("Arial", 14, "bold"))
-    label_titi_panen_title.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
-    row += 1
     
-    label_keterangan_titi_panen = tk.Label(scrollable_frame, text="Opsional, masukkan keterangan Titi Panen:", font=("Arial", 12))
-    label_keterangan_titi_panen.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
-    row += 1
-
-    entry_keterangan_titi_panen = tk.Entry(scrollable_frame, font=("Arial", 10))
-    entry_keterangan_titi_panen.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
-    row += 1
-
-    # Jalan dan Jembatan
-    label_jalan_jembatan_title = tk.Label(scrollable_frame, text="Jalan dan Jembatan", font=("Arial", 14, "bold"))
-    label_jalan_jembatan_title.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
-    row += 1
-    
-    label_keterangan_jalan_jembatan = tk.Label(scrollable_frame, text="Opsional, masukkan keterangan Jalan & Jembatan:", font=("Arial", 12))
-    label_keterangan_jalan_jembatan.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
-    row += 1
-
-    entry_keterangan_jalan_jembatan = tk.Entry(scrollable_frame, font=("Arial", 10))
-    entry_keterangan_jalan_jembatan.grid(row=row, column=0, padx=10, pady=5, sticky="ew")
-    row += 1
-
-    # Hama dan Penyakit
-    label_hama_penyakit_title = make_label(parent=scrollable_frame, text="Hama dan Penyakit", row=row, font=("Arial", 14, "bold"))
-    row += 1
-
-    label_keterangan_hama_penyakit = make_label(parent=scrollable_frame, text="Opsional, masukkan keterangan Hama dan Penyakit:", row=row, font=("Arial", 12))
-    row += 1
-
-    entry_keterangan_hama_penyakit = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
-    row += 1
-
-    # Beneficial Plant
-    label_beneficial_plan_title = make_label(parent=scrollable_frame, text="Beneficial Plant", row=row, font=("Arial", 14, "bold"))
-    row += 1
-    
-    label_keterangan_beneficial_plan = make_label(parent=scrollable_frame, text="Opsional, masukkan keterangan Beneficial Plan:", row=row, font=("Arial", 12))
-    row += 1
-
-    entry_keterangan_beneficial_plan = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
-    row += 1
-
-    # Peilscale
-    label_peilscale_title = make_label(parent=scrollable_frame, text="Peilscale", row=row, font=("Arial", 14, "bold"))
-    row += 1
-    
-    label_keterangan_peilscale = make_label(parent=scrollable_frame, text="Opsional, masukkan keterangan Peilscale:", row=row, font=("Arial", 12))
-    row += 1
-
-    entry_keterangan_peilscale = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
-    row += 1
-
     # Cover Crop
     label_cover_crop_title = make_label(parent=scrollable_frame, text="Cover Crop", row=row, font=("Arial", 14, "bold"))
     row += 1
@@ -5821,13 +5751,7 @@ def qa_calculate_nursery():
         label_estate, combobox_estate,
         label_divisi, combobox_divisi,
         label_blok, combobox_blok,
-        label_circle_path_tph_title, label_keterangan_cpt, entry_keterangan_cpt,
-        label_kondisi_gawangan_title, label_keterangan_gawangan, entry_keterangan_gawangan,
-        label_titi_panen_title, label_keterangan_titi_panen, entry_keterangan_titi_panen,
-        label_jalan_jembatan_title, label_keterangan_jalan_jembatan, entry_keterangan_jalan_jembatan,
-        label_hama_penyakit_title, label_keterangan_hama_penyakit, entry_keterangan_hama_penyakit,
-        label_beneficial_plan_title, label_keterangan_beneficial_plan, entry_keterangan_beneficial_plan,
-        label_peilscale_title, label_keterangan_peilscale, entry_keterangan_peilscale,
+        label_mandor, entry_mandor,
         label_cover_crop_title, label_keterangan_cover_crop, entry_keterangan_cover_crop,
         label_barn_owl_title, label_keterangan_barn_owl, entry_keterangan_barn_owl,
         process_calculation_nursery_button,
@@ -5857,23 +5781,14 @@ def qa_calculate_fertilizer():
             label_divisi, selected_divisi, combobox_divisi, \
             label_blok, selected_blok, combobox_blok, \
             label_mandor, entry_mandor, \
-            label_keterangan_pokok_tidak_terpupuk, entry_keterangan_pokok_tidak_terpupuk, \
-            label_keterangan_piringan_gawangan, entry_keterangan_piringan_gawangan, \
-            label_keterangan_cara_aplikasi, entry_keterangan_cara_aplikasi, \
-            label_kesesuaian_dosis_title, \
-            label_keterangan_alat_tabur_seragam, entry_keterangan_alat_tabur_seragam, \
-            label_keterangan_dosis_alat_tabur, entry_keterangan_dosis_alat_tabur, \
             label_organisasi_title, \
-            label_keterangan_tenaga_pemupuk, entry_keterangan_tenaga_pemupuk, \
             label_keterangan_supervisi, entry_keterangan_supervisi, \
-            label_pemeriksaan_ancak, combobox_pemeriksaan_ancak, label_keterangan_pemeriksaan_ancak, entry_keterangan_pemeriksaan_ancak, \
+            label_pemeriksaan_ancak, combobox_pemeriksaan_ancak, \
             label_jadwal_pemupukan, combobox_jadwal_pemupukan, label_keterangan_jadwal_pemupukan, entry_keterangan_jadwal_pemupukan, \
-            label_keterangan_apd_pekerja, entry_keterangan_apd_pekerja, \
             label_penanganan_pupuk_title, \
-            label_keterangan_fisik_pupuk, entry_keterangan_fisik_pupuk, \
-            label_peletakan_pupuk, combobox_peletakan_pupuk, label_keterangan_peletakan_pupuk, entry_keterangan_peletakan_pupuk, \
-            label_pupuk_tercecer, combobox_pupuk_tercecer, label_keterangan_pupuk_tercecer, entry_keterangan_pupuk_tercecer, \
-            label_pengembalian_karung, combobox_pengembalian_karung, label_keterangan_pengembalian_karung, entry_keterangan_pengembalian_karung, \
+            label_peletakan_pupuk, combobox_peletakan_pupuk, \
+            label_pupuk_tercecer, combobox_pupuk_tercecer, \
+            label_pengembalian_karung, combobox_pengembalian_karung, \
             tree, \
             photo_upload_frame, button_upload_photo, \
             submit_calculation_fertilizer_button, back_button, \
@@ -5951,55 +5866,11 @@ def qa_calculate_fertilizer():
 
     entry_mandor = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
     row+=1
-
-    # Kualitas Aplikasi
-    label_kualitas_aplikasi_title = make_label(parent=scrollable_frame, text="Kualitas Aplikasi", row=row, font=("Arial", 14, "bold"))
-    row += 1
-    
-    label_keterangan_pokok_tidak_terpupuk = make_label(parent=scrollable_frame, text="Opsional, masukkan keterangan pokok tidak terpupuk:", row=row, font=("Arial", 12))
-    row += 1
-
-    entry_keterangan_pokok_tidak_terpupuk = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
-    row += 1
-
-    label_keterangan_piringan_gawangan = make_label(parent=scrollable_frame, text="Opsional, masukkan keterangan ancak semak atau gulma:", row=row, font=("Arial", 12))
-    row += 1
-
-    entry_keterangan_piringan_gawangan = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
-    row += 1
-    
-    label_keterangan_cara_aplikasi = make_label(parent=scrollable_frame, text="Opsional, masukkan keterangan cara aplikasi:", row=row, font=("Arial", 12))
-    row += 1
-
-    entry_keterangan_cara_aplikasi = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
-    row += 1
-
-    # Kesesuaian Dosis
-    label_kesesuaian_dosis_title = make_label(parent=scrollable_frame, text="Kesesuaian Dosis", row=row, font=("Arial", 14, "bold"))
-    row += 1
-
-    label_keterangan_alat_tabur_seragam = make_label(parent=scrollable_frame, text="Opsional, masukkan keterangan keseragaman alat tabur:", row=row, font=("Arial", 12))
-    row += 1
-
-    entry_keterangan_alat_tabur_seragam = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
-    row += 1
-
-    label_keterangan_dosis_alat_tabur = make_label(parent=scrollable_frame, text="Opsional, masukkan keterangan dosis total alat tabur:", row=row, font=("Arial", 12))
-    row += 1
-
-    entry_keterangan_dosis_alat_tabur = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
-    row += 1
     
     # Organisasi
     label_organisasi_title = make_label(parent=scrollable_frame, text="Organisasi", row=row, font=("Arial", 14, "bold"))
     row += 1
-    
-    label_keterangan_tenaga_pemupuk = make_label(parent=scrollable_frame, text="Opsional, masukkan keterangan tenaga pemupuk:", row=row, font=("Arial", 12))
-    row += 1
 
-    entry_keterangan_tenaga_pemupuk = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
-    row += 1
-    
     label_keterangan_supervisi = make_label(parent=scrollable_frame, text="Opsional, masukkan keterangan supervisi:", row=row, font=("Arial", 12))
     row += 1
 
@@ -6012,12 +5883,6 @@ def qa_calculate_fertilizer():
     combobox_pemeriksaan_ancak, _ = make_combobox(scrollable_frame, values=PEMERIKSAAN_ANCAK_PEMUPUKAN_OPTIONS, row=row)
     row += 1
 
-    label_keterangan_pemeriksaan_ancak = make_label(parent=scrollable_frame, text="Opsional, masukkan keterangan pemeriksaan ancak pemupukan:", row=row, font=("Arial", 12))
-    row += 1
-
-    entry_keterangan_pemeriksaan_ancak = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
-    row += 1
-    
     label_jadwal_pemupukan = make_label(parent=scrollable_frame, text="Masukkan Score Jadwal Pemupukan:", row=row, font=("Arial", 12))
     row += 1
 
@@ -6029,21 +5894,9 @@ def qa_calculate_fertilizer():
 
     entry_keterangan_jadwal_pemupukan = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
     row += 1
-
-    label_keterangan_apd_pekerja = make_label(parent=scrollable_frame, text="Opsional, masukkan keterangan APD Kerja:", row=row, font=("Arial", 12))
-    row += 1
-
-    entry_keterangan_apd_pekerja = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
-    row += 1
     
     # Penanganan Pupuk
     label_penanganan_pupuk_title = make_label(parent=scrollable_frame, text="Penanganan Pupuk", row=row, font=("Arial", 14, "bold"))
-    row += 1
-
-    label_keterangan_fisik_pupuk = make_label(parent=scrollable_frame, text="Opsional, masukkan keterangan fisik pupuk:", row=row, font=("Arial", 12))
-    row += 1
-
-    entry_keterangan_fisik_pupuk = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
     row += 1
     
     if not is_zero_weight_year("Peletakan Pupuk", weights):
@@ -6052,39 +5905,21 @@ def qa_calculate_fertilizer():
 
         combobox_peletakan_pupuk, _ = make_combobox(scrollable_frame, values=PELETAKAN_PUPUK_OPTIONS, row=row)
         row += 1
-
-    label_keterangan_peletakan_pupuk = make_label(parent=scrollable_frame, text="Opsional, masukkan keterangan peletakan pupuk:", row=row, font=("Arial", 12))
-    row += 1
-
-    entry_keterangan_peletakan_pupuk = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
-    row += 1
-    
+        
     if not is_zero_weight_year("Pupuk Tercecer", weights):
         label_pupuk_tercecer = make_label(parent=scrollable_frame, text="Masukkan Score Pupuk Tercecer:", row=row, font=("Arial", 12))
         row += 1
 
         combobox_pupuk_tercecer, _ = make_combobox(scrollable_frame, values=PUPUK_TERCECER_OPTIONS, row=row)
         row += 1
-
-    label_keterangan_pupuk_tercecer = make_label(parent=scrollable_frame, text="Opsional, masukkan keterangan pupuk tercecer:", row=row, font=("Arial", 12))
-    row += 1
-
-    entry_keterangan_pupuk_tercecer = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
-    row += 1
-    
+        
     if not is_zero_weight_year("Pengembalian Karung", weights):
         label_pengembalian_karung = make_label(parent=scrollable_frame, text="Masukkan Score Pengembalian Karung:", row=row, font=("Arial", 12))
         row += 1
 
         combobox_pengembalian_karung, _ = make_combobox(scrollable_frame, values=PENGEMBALIAN_KARUNG_OPTIONS, row=row)
         row += 1
-
-    label_keterangan_pengembalian_karung = make_label(parent=scrollable_frame, text="Opsional, masukkan keterangan pengembalian karung:", row=row, font=("Arial", 12))
-    row += 1
-
-    entry_keterangan_pengembalian_karung = make_entry(parent=scrollable_frame, row=row, font=("Arial", 10))
-    row += 1
-
+        
     process_calculation_fertilizer_button = make_button(scrollable_frame, text="Process", row=row, command= lambda: process_fertilizer_calculation(df_mobile_pemupukan_input), font=("Arial", 10), bg=PRIMARY_BUTTON_COLOR, fg=BUTTON_TEXT_COLOR)
     row += 1
 
@@ -6115,27 +5950,14 @@ def qa_calculate_fertilizer():
         label_estate, combobox_estate,
         label_divisi, combobox_divisi,
         label_blok, combobox_blok,
-        label_kualitas_aplikasi_title, 
+        label_mandor, entry_mandor,
         process_calculation_fertilizer_button,
-        label_keterangan_pokok_tidak_terpupuk, entry_keterangan_pokok_tidak_terpupuk,
-        label_keterangan_piringan_gawangan, entry_keterangan_piringan_gawangan,
-        label_keterangan_cara_aplikasi, entry_keterangan_cara_aplikasi,
-        label_kesesuaian_dosis_title,
-        label_keterangan_alat_tabur_seragam, entry_keterangan_alat_tabur_seragam,
-        label_keterangan_dosis_alat_tabur, entry_keterangan_dosis_alat_tabur,
         label_organisasi_title,
-        label_keterangan_tenaga_pemupuk, entry_keterangan_tenaga_pemupuk,
         label_keterangan_supervisi, entry_keterangan_supervisi,
         label_pemeriksaan_ancak, combobox_pemeriksaan_ancak,
-        label_keterangan_pemeriksaan_ancak, entry_keterangan_pemeriksaan_ancak,
         label_jadwal_pemupukan, combobox_jadwal_pemupukan,
         label_keterangan_jadwal_pemupukan, entry_keterangan_jadwal_pemupukan,
-        label_keterangan_apd_pekerja, entry_keterangan_apd_pekerja,
         label_penanganan_pupuk_title,
-        label_keterangan_fisik_pupuk, entry_keterangan_fisik_pupuk,
-        label_keterangan_peletakan_pupuk, entry_keterangan_peletakan_pupuk,
-        label_keterangan_pupuk_tercecer, entry_keterangan_pupuk_tercecer,
-        label_keterangan_pengembalian_karung, entry_keterangan_pengembalian_karung,
         tree,
         photo_upload_frame,
         button_upload_photo,
@@ -6400,6 +6222,7 @@ def qa_calculate_chemist():
         label_estate, combobox_estate,
         label_divisi, combobox_divisi,
         label_blok, combobox_blok,
+        label_mandor, entry_mandor,
         process_calculation_chemist_button,
         label_kualitas_aplikasi_title,
         label_keterangan_kematian_gulma, entry_keterangan_kematian_gulma,
