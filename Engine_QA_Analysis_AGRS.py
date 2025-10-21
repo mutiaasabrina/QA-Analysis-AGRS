@@ -2085,9 +2085,7 @@ def analyse_qa_chemist(
         pokok_tersemprot,
         score_bahan_herbisida,
         total_alat_semprot_layak,
-        total_alat_semprot_tidak_layak,
         total_nozel_seragam,
-        total_nozel_tidak_seragam,
         kesesuaian_kalibrasi_dosis,
         score_pengendalian_gulma,
         score_p3k,
@@ -3259,6 +3257,7 @@ def convert_pengendalian_gulma_to_score(pengendalian_gulma):
 # %%
 def convert_apd_pekerja_chemist_to_score(apd_pekerja_chemist):
     """Convert APD Pekerja Chemist to score."""
+    print(f"apd_pekerja_chemist: {apd_pekerja_chemist}")
     if apd_pekerja_chemist == "Lengkap":
         return 10
     elif apd_pekerja_chemist == "Kurang dari 1 item":
@@ -3400,7 +3399,7 @@ def submit_chemist_analysis():
     tanggal_semprot = filtered_df["Tanggal Semprot"].iloc[0]
     dosis_knapsack = filtered_df["Dosis Knapsack"].iloc[0]
     luas = filtered_df["Luas"].sum()
-    total_tenaga_semprot = filtered_df["Total Tenaga Kerja"].sum()
+    total_tenaga_semprot = filtered_df["Total Tenaga Kerja Semprot"].iloc[0]
     # pokok_sample = filtered_df["Jumlah Pokok"].sum()
     tipe_chemist = filtered_df["Chemist"].iloc[0]
     pokok_gulma = filtered_df["Jumlah Pokok Gulma"].sum()
@@ -3412,8 +3411,10 @@ def submit_chemist_analysis():
     pokok_tidak_tersemprot = filtered_df["Total Pokok Tidak Tersemprot"].sum()
     pokok_sample = pokok_tersemprot + pokok_tidak_tersemprot
     bahan_herbisida = filtered_df["Bahan Herbisida"].iloc[0]
+    total_alat_semprot_layak = filtered_df[filtered_df["Kondisi Alat Semprot"] == "Baik dan Lancar"].shape[0]
     # total_alat_semprot_layak = filtered_df["Total Alat Semprot Baik"].sum()
     # total_alat_semprot_tidak_layak = filtered_df["Total Alat Semprot Tidak Layak"].sum()
+    total_nozel_seragam = filtered_df[filtered_df["Keseragaman Nozel"] == "Seragam"].shape[0]
     # total_nozel_seragam = filtered_df["Total Nozel Seragam"].sum()
     # total_nozel_tidak_seragam = filtered_df["Total Nozel Tidak Seragam"].sum()
     # uji_petik_aktif = filtered_df["Total Uji Petik Aktif"].sum()
@@ -3528,9 +3529,7 @@ def submit_chemist_analysis():
         pokok_tersemprot,
         score_bahan_herbisida,
         total_alat_semprot_layak,
-        total_alat_semprot_tidak_layak,
         total_nozel_seragam,
-        total_nozel_tidak_seragam,
         kesesuaian_kalibrasi_dosis,
         score_pengendalian_gulma,
         score_p3k,
@@ -5113,7 +5112,7 @@ def process_chemist_calculation(df_mobile_input):
     
     diperiksa = filtered_df["Nama Petugas"].iloc[0]
     luas = filtered_df["Luas"].sum()
-    total_tenaga_semprot = filtered_df["Total Tenaga Kerja"].sum()
+    total_tenaga_semprot = filtered_df["Total Tenaga Kerja Semprot"].iloc[0]
     # pokok_sample = filtered_df["Jumlah Pokok"].sum()
     tipe_chemist = filtered_df["Chemist"].iloc[0]
     pokok_gulma = filtered_df["Jumlah Pokok Gulma"].sum()
@@ -5125,8 +5124,10 @@ def process_chemist_calculation(df_mobile_input):
     pokok_tidak_tersemprot = filtered_df["Total Pokok Tidak Tersemprot"].sum()
     pokok_sample = pokok_tersemprot + pokok_tidak_tersemprot
     bahan_herbisida = filtered_df["Bahan Herbisida"].iloc[0]
+    total_alat_semprot_layak = filtered_df[filtered_df["Kondisi Alat Semprot"] == "Baik dan Lancar"].shape[0]
     # total_alat_semprot_layak = filtered_df["Total Alat Semprot Baik"].sum()
     # total_alat_semprot_tidak_layak = filtered_df["Total Alat Semprot Tidak Layak"].sum()
+    total_nozel_seragam = filtered_df[filtered_df["Keseragaman Nozel"] == "Seragam"].shape[0]
     # total_nozel_seragam = filtered_df["Total Nozel Seragam"].sum()
     # total_nozel_tidak_seragam = filtered_df["Total Nozel Tidak Seragam"].sum()
     # uji_petik_aktif = filtered_df["Total Uji Petik Aktif"].sum()
@@ -5159,6 +5160,8 @@ def process_chemist_calculation(df_mobile_input):
             worst_index = idx
             worst_apd = apd
 
+    print(f"worst_apd: {worst_apd}")
+
     # Hitung kelayakan alat semprot, nozel & total pekerja dari tenaga semprot
     # filtered_df['Daftar Tenaga Semprot Dict'] = filtered_df['Daftar Tenaga Semprot'].apply(lambda x: json.loads(x) if isinstance(x, str) else x)
     # daftar_tenaga_semprot = [person for sublist in filtered_df['Daftar Tenaga Semprot Dict'] for person in sublist]
@@ -5185,8 +5188,8 @@ def process_chemist_calculation(df_mobile_input):
         "Dosis per Knapsack Sesuai Standar Kalibrasi": evaluate_dosis_knapsack(kesesuaian_kalibrasi_dosis),
         "Program Pengendalian Gulma": convert_pengendalian_gulma_to_score(program_pengendalian_gulma),
         "Penggunaan HK Sesuai Norma Pekerjaan": evaluate_penggunaan_hk(tipe_chemist, score_kematian_gulma, total_tenaga_semprot, luas),
-        "Kotak P3K Isi Lengkap dan Dibawa Oleh Mandor": convert_apd_pekerja_chemist_to_score(worst_apd),
-        "APD Pekerja": convert_p3k_to_score(kotak_p3k),
+        "Kotak P3K Isi Lengkap dan Dibawa Oleh Mandor": convert_p3k_to_score(kotak_p3k),
+        "APD Pekerja": convert_apd_pekerja_chemist_to_score(worst_apd),
         "Terdapat Kartu Pengambilan dan Pencampuran Bahan": convert_kartu_pengambilan_pencampuran_bahan_to_score(kartu_pengambilan_campuran),
         "Terdapat Kalibrasi Alat dan Nozel": convert_kalibrasi_alat_nozel_to_score(kalibrasi_alat_nozel),
         "Membawa Gelas Ukur & Perkakas Perbaikan Alat Semprot": convert_alat_ukur_perkakas_perbaikan_to_score(gelas_ukur_perkakas),
